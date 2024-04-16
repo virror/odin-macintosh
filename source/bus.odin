@@ -36,12 +36,13 @@ bus_read32 :: proc(address: u32) -> u32
 
 bus_read16 :: proc(address: u32) -> u16
 {
+    addr := address & 0xFFFFFF
     switch address {
         //case 0x400000..<0x420000:       //ROM
             //return (cast(^u16)&rom_mem[address - 0x400000])^
             //return (u16(rom_mem[address - 0x400000 + 1]) | u16(rom_mem[address - 0x400000]) << 8)
         case:                           //Rest of memory
-            return u16(ram_mem[address + 1]) | (u16(ram_mem[address]) << 8)
+            return u16(ram_mem[addr + 1]) | (u16(ram_mem[addr]) << 8)
             //fmt.println(address)
             //panic("Unused mem access")
     }
@@ -50,10 +51,12 @@ bus_read16 :: proc(address: u32) -> u16
 
 bus_read8 :: proc(address: u32) -> u8
 {
+    addr := address & 0xFFFFFF
     switch address {
         case:                           //Rest of memory
-            fmt.println(address)
-            panic("Unused mem access")
+            return ram_mem[addr]
+            //fmt.println(address)
+            //panic("Unused mem access")
     }
     return 0
 }
@@ -69,10 +72,11 @@ bus_write32 :: proc(address: u32, value: u32)
 
 bus_write16 :: proc(address: u32, value: u16)
 {
+    addr := address & 0xFFFFFF
     switch address {
         case:                           //Rest of memory
-            ram_mem[address + 1] = u8(value & 0xFF)
-            ram_mem[address + 0] = u8((value >> 8) & 0xFF)
+            ram_mem[addr + 1] = u8(value & 0xFF)
+            ram_mem[addr + 0] = u8((value >> 8) & 0xFF)
             //fmt.println(address)
             //panic("Unused mem access")
     }
@@ -80,9 +84,11 @@ bus_write16 :: proc(address: u32, value: u16)
 
 bus_write8 :: proc(address: u32, value: u8)
 {
+    addr := address & 0xFFFFFF
     switch address {
         case:                           //Rest of memory
-            fmt.println(address)
-            panic("Unused mem access")
+            ram_mem[addr] = value
+            //fmt.println(address)
+            //panic("Unused mem access")
     }
 }

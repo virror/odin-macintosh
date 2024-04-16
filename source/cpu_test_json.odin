@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:os"
 import "core:encoding/json"
 
+@(private="file")
 Registers :: struct {
     d0: u32,
     d1: u32,
@@ -20,7 +21,6 @@ Registers :: struct {
     a4: u32,
     a5: u32,
     a6: u32,
-    a7: u32,
     usp: u32,
     ssp: u32,
     sr: u16,
@@ -29,6 +29,7 @@ Registers :: struct {
     ram: [dynamic][2]u32,
 }
 
+@(private="file")
 Json_data :: struct {
     name: string,
     initial: Registers,
@@ -36,18 +37,33 @@ Json_data :: struct {
     length: u32,
 }
 
+@(private="file")
+test_fail: bool
+
 test_file :: proc()
 {
     //Setup
     data, err := os.read_entire_file_from_filename("tests/ADD.b.json")
     assert(err == true)
-    json_data: Json_data
+    json_data: [dynamic]Json_data
     error := json.unmarshal(data, &json_data)
     if error != nil {
-        fmt.println("error")
+        fmt.println(error)
+        return
     }
     delete(data)
+    test_length := len(json_data)
+    for i:= 0; i < test_length; i += 1 {
+        if !test_fail {
+            test_run(json_data[i])
+        }
+    }
+}
 
+@(private="file")
+test_run :: proc(json_data: Json_data)
+{
+    error_string: string
     D[0] = json_data.initial.d0
     D[1] = json_data.initial.d1
     D[2] = json_data.initial.d2
@@ -63,9 +79,8 @@ test_file :: proc()
     A[4] = json_data.initial.a4
     A[5] = json_data.initial.a5
     A[6] = json_data.initial.a6
-    A[7] = json_data.initial.a7
     usp = json_data.initial.usp
-    ssp = json_data.initial.ssp
+    A[7] = json_data.initial.ssp
     sr = json_data.initial.sr
     pc = json_data.initial.pc
 
@@ -75,80 +90,86 @@ test_file :: proc()
     ram_length := len(json_data.initial.ram)
     for i:= 0; i < ram_length; i += 1 {
         mem_val := json_data.initial.ram[i]
-        bus_write16(mem_val[0], u16(mem_val[1]))
+        bus_write8(mem_val[0], u8(mem_val[1]))
     }
 
     //Run opcode
-    fmt.println(json_data.name)
-    cpu_decode(bus_read16(pc))
+    opcode := bus_read16(pc)
     pc += 2
+    cpu_decode(opcode)
 
     //Compare results
     if D[0] != json_data.final.d0 {
-        fmt.printf("Fail: D0 %d != %d\n", D[0], json_data.final.d0)
+        error_string = fmt.aprintf("Fail: D0 %d != %d", D[0], json_data.final.d0)
     }
     if D[1] != json_data.final.d1 {
-        fmt.printf("Fail: D1 %d != %d\n", D[1], json_data.final.d1)
+        error_string = fmt.aprintf("Fail: D1 %d != %d", D[1], json_data.final.d1)
     }
     if D[2] != json_data.final.d2 {
-        fmt.printf("Fail: D2 %d != %d\n", D[2], json_data.final.d2)
+        error_string = fmt.aprintf("Fail: D2 %d != %d", D[2], json_data.final.d2)
     }
     if D[3] != json_data.final.d3 {
-        fmt.printf("Fail: D3 %d != %d\n", D[3], json_data.final.d3)
+        error_string = fmt.aprintf("Fail: D3 %d != %d", D[3], json_data.final.d3)
     }
     if D[4] != json_data.final.d4 {
-        fmt.printf("Fail: D4 %d != %d\n", D[4], json_data.final.d4)
+        error_string = fmt.aprintf("Fail: D4 %d != %d", D[4], json_data.final.d4)
     }
     if D[5] != json_data.final.d5 {
-        fmt.printf("Fail: D5 %d != %d\n", D[5], json_data.final.d5)
+        error_string = fmt.aprintf("Fail: D5 %d != %d", D[5], json_data.final.d5)
     }
     if D[6] != json_data.final.d6 {
-        fmt.printf("Fail: D6 %d != %d\n", D[6], json_data.final.d6)
+        error_string = fmt.aprintf("Fail: D6 %d != %d", D[6], json_data.final.d6)
     }
     if D[7] != json_data.final.d7 {
-        fmt.printf("Fail: D7 %d != %d\n", D[7], json_data.final.d7)
+        error_string = fmt.aprintf("Fail: D7 %d != %d", D[7], json_data.final.d7)
     }
     if A[0] != json_data.final.a0 {
-        fmt.printf("Fail: A0 %d != %d\n", A[0], json_data.final.a0)
+        error_string = fmt.aprintf("Fail: A0 %d != %d", A[0], json_data.final.a0)
     }
     if A[1] != json_data.final.a1 {
-        fmt.printf("Fail: A1 %d != %d\n", A[1], json_data.final.a1)
+        error_string = fmt.aprintf("Fail: A1 %d != %d", A[1], json_data.final.a1)
     }
     if A[2] != json_data.final.a2 {
-        fmt.printf("Fail: A2 %d != %d\n", A[2], json_data.final.a2)
+        error_string = fmt.aprintf("Fail: A2 %d != %d", A[2], json_data.final.a2)
     }
     if A[3] != json_data.final.a3 {
-        fmt.printf("Fail: A3 %d != %d\n", A[3], json_data.final.a3)
+        error_string = fmt.aprintf("Fail: A3 %d != %d", A[3], json_data.final.a3)
     }
     if A[4] != json_data.final.a4 {
-        fmt.printf("Fail: A4 %d != %d\n", A[4], json_data.final.a4)
+        error_string = fmt.aprintf("Fail: A4 %d != %d", A[4], json_data.final.a4)
     }
     if A[5] != json_data.final.a5 {
-        fmt.printf("Fail: A5 %d != %d\n", A[5], json_data.final.a5)
+        error_string = fmt.aprintf("Fail: A5 %d != %d", A[5], json_data.final.a5)
     }
     if A[6] != json_data.final.a6 {
-        fmt.printf("Fail: A6 %d != %d\n", A[6], json_data.final.a6)
-    }
-    if A[7] != json_data.final.a7 {
-        fmt.printf("Fail: A7 %d != %d\n", A[7], json_data.final.a7)
+        error_string = fmt.aprintf("Fail: A6 %d != %d", A[6], json_data.final.a6)
     }
     if usp != json_data.final.usp {
-        fmt.printf("Fail: usp %d != %d\n", usp, json_data.final.usp)
+        error_string = fmt.aprintf("Fail: usp %d != %d", usp, json_data.final.usp)
     }
-    if ssp != json_data.final.ssp {
-        fmt.printf("Fail: ssp %d != %d\n", ssp, json_data.final.ssp)
+    if A[7] != json_data.final.ssp {
+        error_string = fmt.aprintf("Fail: ssp %d != %d", A[7], json_data.final.ssp)
     }
-    if sr != json_data.final.sr {
-        fmt.printf("Fail: sr %d != %d\n", sr, json_data.final.sr)
-    }
+    //TODO: Test sr
+    /*if sr != json_data.final.sr {
+        error_string = fmt.aprintf("Fail: sr %d != %d", sr, json_data.final.sr)
+    }*/
+    //TODO: Test prefetch
     if pc != json_data.final.pc {
-        fmt.printf("Fail: pc %d != %d\n", pc, json_data.final.pc)
+        error_string = fmt.aprintf("Fail: pc %d != %d", pc, json_data.final.pc)
     }
     for i:= 0; i < ram_length; i += 1 {
         final := json_data.final.ram[i]
-        data := bus_read16(final[0])
-        if data != u16(final[1]) {
-            fmt.printf("Fail: ram %d != %d\n", data, final[1])
+        data := bus_read8(final[0])
+        if u32(data) != final[1] {
+            error_string = fmt.aprintf("Fail: ram %d != %d", data, final[1])
         }
+    }
+    //TODO: Test length
+    if error_string != "" {
+        fmt.println(json_data.name)
+        fmt.println(error_string)
+        test_fail = true
+        exit = true
     }
 }

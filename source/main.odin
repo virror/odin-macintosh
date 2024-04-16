@@ -9,7 +9,6 @@ import sdlttf "vendor:sdl2/ttf"
 WIN_WIDTH :: 1024
 WIN_HEIGHT :: 512
 
-@(private="file")
 exit := false
 @(private="file")
 pause := true
