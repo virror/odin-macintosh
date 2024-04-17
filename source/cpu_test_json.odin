@@ -39,6 +39,7 @@ Json_data :: struct {
 
 @(private="file")
 test_fail: bool
+fail_cnt: int
 
 test_file :: proc()
 {
@@ -58,6 +59,7 @@ test_file :: proc()
             test_run(json_data[i])
         }
     }
+    fmt.println(fail_cnt)
 }
 
 @(private="file")
@@ -96,7 +98,7 @@ test_run :: proc(json_data: Json_data)
     //Run opcode
     opcode := bus_read16(pc)
     pc += 2
-    cpu_decode(opcode)
+    cycles := cpu_decode(opcode)
 
     //Compare results
     if D[0] != json_data.final.d0 {
@@ -165,11 +167,14 @@ test_run :: proc(json_data: Json_data)
             error_string = fmt.aprintf("Fail: ram %d != %d", data, final[1])
         }
     }
-    //TODO: Test length
+    if cycles != json_data.length {
+        error_string = fmt.aprintf("Fail: length %d != %d", cycles, json_data.length)
+    }
     if error_string != "" {
         fmt.println(json_data.name)
         fmt.println(error_string)
         test_fail = true
+        fail_cnt += 1
         exit = true
     }
 }

@@ -120,33 +120,62 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
     return 0, 0
 }
 
-cpu_decode :: proc(opcode: u16)
+cpu_get_addr_cycles_bw :: proc(mode: u16, reg: u16) -> u32
+{
+    switch mode {
+        case 0, 1:
+            return 0
+        case 2, 3:
+            return 4
+        case 4:
+            return 6
+        case 5:
+            return 8
+        case 6:
+            return 10
+        case 7:
+            switch reg {
+                case 0, 2:
+                    return 8
+                case 1:
+                    return 12
+                case 3:
+                    return 10
+                case 4:
+                    return 4
+            }
+    }
+    return 0
+}
+
+cpu_decode :: proc(opcode: u16) -> u32
 {
     code := (opcode >> 8)
     switch code {
         case 0x06:          //ADDI
-            cpu_addi(opcode)
+            return cpu_addi(opcode)
         case 0x50..=0x5F:
             if (opcode >> 6) & 3 == 3 {
                 fmt.printf("Unhandled opcode: 0x%X\n", opcode)
             } else {
-                cpu_addq(opcode)
+                return cpu_addq(opcode)
             }
         case 0xD0..=0xDF:   //ADD
-            cpu_add(opcode)
+            return cpu_add(opcode)
         case:
             fmt.printf("Unhandled opcode: 0x%X\n", opcode)
             //panic("")
     }
+    return 0
 }
 
-cpu_addi :: proc(opcode: u16)
+cpu_addi :: proc(opcode: u16) -> u32
 {
     size := (opcode >> 6) & 3
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
     imm: u32
-
+    length := cpu_get_addr_cycles_bw(mode, reg)
     switch size {
         case 0:
             imm = u32(u8(bus_read16(pc)))
@@ -157,12 +186,18 @@ cpu_addi :: proc(opcode: u16)
         case 2:
             fmt.println("Unhandled size: 2")
     }
+    if mode == 0 {
+        length += 8
+    } else {
+        length += 12
+    }
     ea_data, addr := cpu_get_ea_data8(mode, reg)
     data := ea_data + u8(imm)
     bus_write8(addr, u8(data))
+    return length
 }
 
-cpu_addq :: proc(opcode: u16)
+cpu_addq :: proc(opcode: u16) -> u32
 {
     data := (opcode >> 9) & 7
     if data == 0 {
@@ -171,23 +206,27 @@ cpu_addq :: proc(opcode: u16)
     size := (opcode >> 6) & 3
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
+    length := cpu_get_addr_cycles_bw(mode, reg)
 
     switch size {
         case 0:
             if mode == 0 {
                 D[reg] += u32(data)
+                length += 4
             } else {
                 ea_data, addr := cpu_get_ea_data8(mode, reg)
                 bus_write8(addr, u8(data) + (ea_data))
+                length += 8
             }
         case 1:
             fmt.println("Unhandled size: 1")
         case 2:
             fmt.println("Unhandled size: 2")
     }
+    return length
 }
 
-cpu_add :: proc(opcode: u16)
+cpu_add :: proc(opcode: u16) -> u32
 {
     reg := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
@@ -195,18 +234,22 @@ cpu_add :: proc(opcode: u16)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
     dest_reg: u16
+    length := cpu_get_addr_cycles_bw(mode, reg2)
 
     switch size {
         case 0:
             ea_data, addr := cpu_get_ea_data8(mode, reg2)
             if dir == 1 {
                 bus_write8(addr, u8(ea_data) + u8(D[reg]))
+                length += 8
             } else {
                 D[reg] = u32(i64(i8(ea_data)) + i64(D[reg]))
+                length += 4
             }
         case 1:
             fmt.println("Unhandled size: 1")
         case 2:
             fmt.println("Unhandled size: 2")
     }
+    return length
 }
