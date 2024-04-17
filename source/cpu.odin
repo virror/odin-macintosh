@@ -58,16 +58,16 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
             ext1 := bus_read16(pc)
             da:= ext1 >> 15
             wl:= (ext1 >> 11) & 1
-            reg:= (ext1 >> 12) & 7
+            ireg:= (ext1 >> 12) & 7
             pc += 2
-            index_reg: u32
+            index_reg: u64
             if da == 1 {
-                index_reg = A[reg]
+                index_reg = u64(A[ireg])
             } else {
-                index_reg = D[reg]
+                index_reg = u64(D[ireg])
             }
             if wl == 0 {
-                index_reg = u32(u16(index_reg))
+                index_reg = u64(i32(i16(index_reg)))
             }
             addr:= u32(i64(A[reg]) + i64(i8(ext1)) + i64(index_reg))
             return bus_read8(addr), addr
@@ -76,7 +76,8 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
                 case 0:
                     ext1 := u32(bus_read16(pc))
                     pc += 2
-                    return bus_read8(ext1), ext1
+                    addr := u32(i32(i16(ext1)))
+                    return bus_read8(addr), addr
                 case 1:
                     ext1 := bus_read16(pc)
                     pc += 2
@@ -93,13 +94,13 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
                     ext1 := bus_read16(pc)
                     da:= ext1 >> 15
                     wl:= (ext1 >> 11) & 1
-                    reg:= (ext1 >> 12) & 7
+                    ireg:= (ext1 >> 12) & 7
                     pc += 2
                     index_reg: i32
                     if da == 1 {
-                        index_reg = i32(A[reg])
+                        index_reg = i32(A[ireg])
                     } else {
-                        index_reg = i32(D[reg])
+                        index_reg = i32(D[ireg])
                     }
                     if wl == 0 {
                         index_reg = i32(i16(index_reg))
@@ -173,8 +174,12 @@ cpu_addq :: proc(opcode: u16)
 
     switch size {
         case 0:
-            ea_data, addr := cpu_get_ea_data8(mode, reg)
-            bus_write8(addr, u8(data) + ea_data)
+            if mode == 0 {
+                D[reg] += u32(data)
+            } else {
+                ea_data, addr := cpu_get_ea_data8(mode, reg)
+                bus_write8(addr, u8(data) + (ea_data))
+            }
         case 1:
             fmt.println("Unhandled size: 1")
         case 2:
