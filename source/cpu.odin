@@ -3,28 +3,67 @@ package main
 import "core:fmt"
 import "core:intrinsics"
 
+SR :: bit_field u16 {
+    c: bool         | 1,
+    v: bool         | 1,
+    z: bool         | 1,
+    n: bool         | 1,
+    e: bool         | 1,
+    na2: u8         | 3,
+    intr_mask: u8   | 3,
+    na1: bool       | 1,
+    intr_enbl: bool | 1,
+    super: bool     | 1,
+    trace: u8       | 2,
+}
+
 D: [8]u32
-A: [8]u32
+A: [7]u32
 pc: u32
-sr: u16
+sr: SR
 usp: u32
 ssp: u32
-user: bool
 //vbr?
 
 cpu_init :: proc()
 {
     pc = 0x400000
-    user = false
+    sr.super = true
 }
 
-cpu_step :: proc() -> u64
+cpu_step :: proc() -> u32
 {
     fmt.println("Decode")
     opcode := bus_read16(pc)
     pc += 2
-    cpu_decode(opcode)
-    return 2
+    cycles := cpu_decode(opcode)
+    return cycles
+}
+
+cpu_Areg_set :: proc(reg: u16, value: u32)
+{
+    if reg == 7 {
+        if sr.super {
+            ssp = value
+        } else {
+            usp = value
+        }
+    } else {
+        A[reg] = value
+    }
+}
+
+cpu_Areg_get :: proc(reg: u16) -> u32
+{
+    if reg == 7 {
+        if sr.super {
+            return ssp
+        } else {
+            return usp
+        }
+    } else {
+        return A[reg]
+    }
 }
 
 cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
@@ -33,26 +72,31 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
         case 0:
             return u8(D[reg]), 0
         case 2:
-            return bus_read8(A[reg]), A[reg]
+            data := cpu_Areg_get(reg)
+            return bus_read8(data), data
         case 3:
-            addr := A[reg]
+            addr := cpu_Areg_get(reg)
+            tmp_reg := addr
             if reg == 7 {
-                A[reg] += 2
+                tmp_reg += 2
             } else {
-                A[reg] += 1
+                tmp_reg += 1
             }
+            cpu_Areg_set(reg, tmp_reg)
             return bus_read8(addr), addr
         case 4:
+            data := cpu_Areg_get(reg)
             if reg == 7 {
-                A[reg] -= 2
+                data -= 2
             } else {
-                A[reg] -= 1
+                data -= 1
             }
-            return bus_read8(A[reg]), A[reg]
+            cpu_Areg_set(reg, data)
+            return bus_read8(data), data
         case 5:
             ext1 := i16(bus_read16(pc))
             pc += 2
-            addr:= u32(i64(A[reg]) + i64(ext1))
+            addr:= u32(i64(cpu_Areg_get(reg)) + i64(ext1))
             return bus_read8(addr), addr
         case 6:
             ext1 := bus_read16(pc)
@@ -62,14 +106,14 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
             pc += 2
             index_reg: u64
             if da == 1 {
-                index_reg = u64(A[ireg])
+                index_reg = u64(cpu_Areg_get(ireg))
             } else {
                 index_reg = u64(D[ireg])
             }
             if wl == 0 {
                 index_reg = u64(i32(i16(index_reg)))
             }
-            addr:= u32(i64(A[reg]) + i64(i8(ext1)) + i64(index_reg))
+            addr:= u32(i64(cpu_Areg_get(reg)) + i64(i8(ext1)) + i64(index_reg))
             return bus_read8(addr), addr
         case 7:
             switch reg {
@@ -98,7 +142,7 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
                     pc += 2
                     index_reg: i32
                     if da == 1 {
-                        index_reg = i32(A[ireg])
+                        index_reg = i32(cpu_Areg_get(ireg))
                     } else {
                         index_reg = i32(D[ireg])
                     }

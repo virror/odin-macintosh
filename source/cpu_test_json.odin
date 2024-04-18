@@ -82,8 +82,8 @@ test_run :: proc(json_data: Json_data)
     A[5] = json_data.initial.a5
     A[6] = json_data.initial.a6
     usp = json_data.initial.usp
-    A[7] = json_data.initial.ssp
-    sr = json_data.initial.sr
+    ssp = json_data.initial.ssp
+    sr = SR(json_data.initial.sr)
     pc = json_data.initial.pc
 
     bus_write16(pc, json_data.initial.prefetch[0])
@@ -149,8 +149,8 @@ test_run :: proc(json_data: Json_data)
     if usp != json_data.final.usp {
         error_string = fmt.aprintf("Fail: usp %d != %d", usp, json_data.final.usp)
     }
-    if A[7] != json_data.final.ssp {
-        error_string = fmt.aprintf("Fail: ssp %d != %d", A[7], json_data.final.ssp)
+    if ssp != json_data.final.ssp {
+        error_string = fmt.aprintf("Fail: ssp %d != %d", ssp, json_data.final.ssp)
     }
     //TODO: Test sr
     /*if sr != json_data.final.sr {
