@@ -88,6 +88,8 @@ test_run :: proc(json_data: Json_data)
 
     bus_write16(pc, json_data.initial.prefetch[0])
     bus_write16(pc + 2, json_data.initial.prefetch[1])
+    prefetch[0] = json_data.initial.prefetch[0]
+    prefetch[2] = json_data.initial.prefetch[1]
 
     ram_length := len(json_data.initial.ram)
     for i:= 0; i < ram_length; i += 1 {
@@ -96,9 +98,7 @@ test_run :: proc(json_data: Json_data)
     }
 
     //Run opcode
-    opcode := bus_read16(pc)
-    pc += 2
-    cycles := cpu_decode(opcode)
+    cycles := cpu_decode(prefetch[0])
 
     //Compare results
     if D[0] != json_data.final.d0 {
@@ -156,7 +156,12 @@ test_run :: proc(json_data: Json_data)
     /*if sr != json_data.final.sr {
         error_string = fmt.aprintf("Fail: sr %d != %d", sr, json_data.final.sr)
     }*/
-    //TODO: Test prefetch
+    if prefetch[0] != json_data.final.prefetch[0] {
+        error_string = fmt.aprintf("Fail: prefetch 0 %d != %d", prefetch[0], json_data.final.prefetch[0])
+    }
+    if prefetch[2] != json_data.final.prefetch[1] {
+        error_string = fmt.aprintf("Fail: prefetch 1 %d != %d", prefetch[2], json_data.final.prefetch[1])
+    }
     if pc != json_data.final.pc {
         error_string = fmt.aprintf("Fail: pc %d != %d", pc, json_data.final.pc)
     }
