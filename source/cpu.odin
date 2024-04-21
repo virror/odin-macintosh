@@ -1,14 +1,14 @@
 package main
 
 import "core:fmt"
-import "core:intrinsics"
+import "base:intrinsics"
 
 SR :: bit_field u16 {
     c: bool         | 1,
     v: bool         | 1,
     z: bool         | 1,
     n: bool         | 1,
-    e: bool         | 1,
+    x: bool         | 1,
     na2: u8         | 3,
     intr_mask: u8   | 3,
     na1: bool       | 1,
@@ -207,6 +207,8 @@ cpu_decode :: proc(opcode: u16) -> u32
     switch code {
         case 0x06:          //ADDI
             return cpu_addi(opcode)
+        case 0x42:          //CLR
+            return cpu_clr(opcode)
         case 0x50..=0x5F:
             if (opcode >> 6) & 3 == 3 {
                 fmt.printf("Unhandled opcode: 0x%X\n", opcode)
@@ -239,13 +241,45 @@ cpu_addi :: proc(opcode: u16) -> u32
     }
     if mode == 0 {
         length += 8
+        cpu_prefetch()
+        D[reg] += u32(u8(imm))
     } else {
         length += 12
+        ea_data, addr := cpu_get_ea_data8(mode, reg)
+        data := ea_data + u8(imm)
+        cpu_prefetch()
+        bus_write8(addr, u8(data))
     }
-    ea_data, addr := cpu_get_ea_data8(mode, reg)
-    data := ea_data + u8(imm)
+    return length
+}
+
+cpu_clr :: proc(opcode: u16) -> u32
+{
+    size := (opcode >> 6) & 3
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+    length: u32
+
+    switch size {
+        case 0:
+            if mode == 0 {
+                D[reg] = D[reg] & 0xFFFFFF00
+                length = 4
+            } else {
+                ea_data, addr := cpu_get_ea_data8(mode, reg)
+                bus_write8(addr, 0)
+                length = 8 + cpu_get_addr_cycles_bw(mode, reg)
+            }
+        case 1:
+            fmt.println("Unhandled size: 1")
+        case 2:
+            fmt.println("Unhandled size: 2")
+    }
+    sr.n = false
+    sr.z = true
+    sr.v = false
+    sr.c = false
     cpu_prefetch()
-    bus_write8(addr, u8(data))
     return length
 }
 
@@ -295,7 +329,11 @@ cpu_add :: proc(opcode: u16) -> u32
             ea_data, addr := cpu_get_ea_data8(mode, reg2)
             cpu_prefetch()
             if dir == 1 {
-                bus_write8(addr, u8(ea_data) + u8(D[reg]))
+                if mode == 0 {
+                    D[reg] += u32(ea_data)
+                } else {
+                    bus_write8(addr, u8(ea_data) + u8(D[reg]))
+                }
                 length += 8
             } else {
                 D[reg] = u32(i64(i8(ea_data)) + i64(D[reg]))
