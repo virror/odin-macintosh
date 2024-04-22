@@ -3,6 +3,21 @@ package main
 import "core:fmt"
 import "base:intrinsics"
 
+Exception :: enum {
+    Reset,
+    Interrupt,
+    Uninitialized,
+    Spurious,
+    Trap,
+    Illegal,
+    Privilege,
+    Tracing,
+    Bus,
+    Address,
+    Zero,
+    CHK,
+}
+
 SR :: bit_field u16 {
     c: bool         | 1,
     v: bool         | 1,
@@ -28,10 +43,17 @@ prefetch: [3]u16
 
 cpu_init :: proc()
 {
-    pc = 0x400000
-    sr.super = true
-    prefetch[0] = bus_read16(pc)
+    //pc = 0x400000
+    cpu_exception(.Reset, 0, 0)
+    cpu_refetch()
+}
+
+cpu_refetch :: proc()
+{
+    prefetch[2] = bus_read16(pc)
+    prefetch[1] = prefetch[2]
     prefetch[2] = bus_read16(pc + 2)
+    prefetch[0] = prefetch[1]
 }
 
 cpu_prefetch :: proc()
@@ -201,6 +223,59 @@ cpu_get_addr_cycles_bw :: proc(mode: u16, reg: u16) -> u32
     return 0
 }
 
+// TODO: Still needs loads of work
+cpu_exception :: proc(exc: Exception, addr: u32, opcode: u16)
+{
+    exc_vec: u32
+    tmp_sr := u16(sr)
+    sr.super = true
+    sr.trace = 0
+    sr.intr_mask = 7    //TODO; Check this
+
+    if exc == .Reset {
+        ssp = bus_read32(0x00)
+        pc = bus_read32(0x04)
+        return
+    }
+
+    ssp -= 4
+    bus_write32(ssp, pc)
+    ssp -= 2
+    bus_write16(ssp, tmp_sr)
+    #partial switch exc {
+        case .Bus:
+            exc_vec = 8
+        case .Address:
+            exc_vec = 12
+        case .Illegal:
+            exc_vec = 16
+        case .Zero:
+            exc_vec = 20
+        case .CHK:
+            exc_vec = 24
+        case .Trap:
+            exc_vec = 28
+        case .Privilege:
+            exc_vec = 32
+        case .Tracing:
+            exc_vec = 36
+        case .Uninitialized:
+            exc_vec = 60
+        case .Spurious:
+            exc_vec = 96
+    }
+    ssp -= 2
+    bus_write16(ssp, opcode)
+    ssp -= 4
+    bus_write32(ssp, addr)
+    ssp -= 1
+    bus_write8(ssp, 117)//?
+    ssp -= 1
+    bus_write8(ssp, 66) //?
+    pc = bus_read32(exc_vec)
+    cpu_refetch()
+}
+
 cpu_decode :: proc(opcode: u16) -> u32
 {
     code := (opcode >> 8)
@@ -271,7 +346,19 @@ cpu_clr :: proc(opcode: u16) -> u32
                 length = 8 + cpu_get_addr_cycles_bw(mode, reg)
             }
         case 1:
-            fmt.println("Unhandled size: 1")
+            if mode == 0 {
+                D[reg] = D[reg] & 0xFFFF0000
+                length = 4
+            } else {
+                ea_data, addr := cpu_get_ea_data8(mode, reg)
+                if (addr & 1) == 1 {
+                    cpu_exception(.Address, addr, opcode)
+                    return 54
+                }
+                bus_write8(addr, 0)
+                bus_write8(addr + 1, 0)
+                length = 8 + cpu_get_addr_cycles_bw(mode, reg)
+            }
         case 2:
             fmt.println("Unhandled size: 2")
     }

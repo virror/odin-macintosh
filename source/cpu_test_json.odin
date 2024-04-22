@@ -44,7 +44,7 @@ fail_cnt: int
 test_file :: proc()
 {
     //Setup
-    data, err := os.read_entire_file_from_filename("tests/ADD.b.json")
+    data, err := os.read_entire_file_from_filename("tests/CLR.w.json")
     assert(err == true)
     json_data: [dynamic]Json_data
     error := json.unmarshal(data, &json_data)
@@ -165,11 +165,12 @@ test_run :: proc(json_data: Json_data)
     if pc != json_data.final.pc {
         error_string = fmt.aprintf("Fail: pc %d != %d", pc, json_data.final.pc)
     }
-    for i:= 0; i < ram_length; i += 1 {
+    final_ram_length := len(json_data.final.ram)
+    for i:= 0; i < final_ram_length; i += 1 {
         final := json_data.final.ram[i]
         data := bus_read8(final[0])
         if u32(data) != final[1] {
-            error_string = fmt.aprintf("Fail: ram %d != %d", data, final[1])
+            error_string = fmt.aprintf("Fail: ram at %d: %d != %d", final[0], data, final[1])
         }
     }
     if cycles != json_data.length {

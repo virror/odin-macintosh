@@ -18,6 +18,7 @@ bus_init :: proc()
 
 bus_read32 :: proc(address: u32) -> u32
 {
+    addr := address & 0xFFFFFF
     switch address {
         //case 0x000000..<0x080000:       //RAM
         //case 0x400000..<0x420000:       //ROM
@@ -28,8 +29,10 @@ bus_read32 :: proc(address: u32) -> u32
         case 0xE80000..<0xF00000:       //VIA
         case 0xF00000..<0xF80000:       //Phase read*/
         case:                           //Rest of memory
-            fmt.println(address)
-            panic("Unused mem access")
+            return u32(ram_mem[addr + 3]) | (u32(ram_mem[addr + 2]) << 8) |
+                   u32(ram_mem[addr + 1]) | (u32(ram_mem[addr]) << 8)
+            //fmt.println(address)
+            //panic("Unused mem access")
     }
     return 0
 }
@@ -63,10 +66,15 @@ bus_read8 :: proc(address: u32) -> u8
 
 bus_write32 :: proc(address: u32, value: u32)
 {
+    addr := address & 0xFFFFFF
     switch address {
         case:                           //Rest of memory
-            fmt.println(address)
-            panic("Unused mem access")
+            ram_mem[addr + 3] = u8(value & 0xFF)
+            ram_mem[addr + 2] = u8((value >> 8) & 0xFF)
+            ram_mem[addr + 1] = u8((value >> 16) & 0xFF)
+            ram_mem[addr + 0] = u8((value >> 24) & 0xFF)
+            //fmt.println(address)
+            //panic("Unused mem access")
     }
 }
 
