@@ -105,14 +105,12 @@ cpu_Areg_get :: proc(reg: u16) -> u32
     }
 }
 
-cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
+cpu_get_address :: proc(mode: u16, reg: u16) -> u32
 {
     switch mode {
-        case 0:
-            return u8(D[reg]), 0
         case 2:
-            data := cpu_Areg_get(reg)
-            return bus_read8(data), data
+            addr := cpu_Areg_get(reg)
+            return addr
         case 3:
             addr := cpu_Areg_get(reg)
             tmp_reg := addr
@@ -122,20 +120,20 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
                 tmp_reg += 1
             }
             cpu_Areg_set(reg, tmp_reg)
-            return bus_read8(addr), addr
+            return addr
         case 4:
-            data := cpu_Areg_get(reg)
+            addr := cpu_Areg_get(reg)
             if reg == 7 {
-                data -= 2
+                addr -= 2
             } else {
-                data -= 1
+                addr -= 1
             }
-            cpu_Areg_set(reg, data)
-            return bus_read8(data), data
+            cpu_Areg_set(reg, addr)
+            return addr
         case 5:
             ext1 := i16(cpu_fetch())
             addr:= u32(i64(cpu_Areg_get(reg)) + i64(ext1))
-            return bus_read8(addr), addr
+            return addr
         case 6:
             ext1 := cpu_fetch()
             da:= ext1 >> 15
@@ -151,22 +149,22 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
                 index_reg = u64(i32(i16(index_reg)))
             }
             addr:= u32(i64(cpu_Areg_get(reg)) + i64(i8(ext1)) + i64(index_reg))
-            return bus_read8(addr), addr
+            return addr
         case 7:
             switch reg {
                 case 0:
                     ext1 := u32(cpu_fetch())
                     addr := u32(i32(i16(ext1)))
-                    return bus_read8(addr), addr
+                    return addr
                 case 1:
                     ext1 := cpu_fetch()
                     ext2 := cpu_fetch()
                     addr:= (u32(ext1) << 16) | u32(ext2)
-                    return bus_read8(addr), addr
+                    return addr
                 case 2:
                     ext1 := i16(cpu_fetch())
                     addr:= u32(i64(pc) + i64(ext1))
-                    return bus_read8(addr), addr
+                    return addr
                 case 3:
                     ext1 := cpu_fetch()
                     da:= ext1 >> 15
@@ -182,17 +180,22 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16) -> (u8, u32)
                         index_reg = i32(i16(index_reg))
                     }
                     addr:= u32(i64(ext1) + i64(pc) + i64(index_reg))
-                    return bus_read8(addr), addr
-                case 4:
-                    ext1 := u8(cpu_fetch())
-                    return u8(ext1), 0
-                case:
-                    fmt.printf("Unhandled 111 sub mode: %d\n", reg)
+                    return addr
             }
-        case:
-            fmt.printf("Unhandled mode: %d\n", mode)
     }
-    return 0, 0
+    return 0
+}
+
+cpu_get_ea_data8 :: proc(mode: u16, reg: u16, addr: u32) -> (u8)
+{
+    if mode == 0 {
+        return u8(D[reg])
+    } else if mode == 7 && reg == 4 {
+        ext1 := u8(cpu_fetch())
+        return u8(ext1)
+    } else {
+        return bus_read8(addr)
+    }
 }
 
 cpu_get_addr_cycles_bw :: proc(mode: u16, reg: u16) -> u32
@@ -320,7 +323,8 @@ cpu_addi :: proc(opcode: u16) -> u32
         D[reg] += u32(u8(imm))
     } else {
         length += 12
-        ea_data, addr := cpu_get_ea_data8(mode, reg)
+        addr := cpu_get_address(mode, reg)
+        ea_data := cpu_get_ea_data8(mode, reg, addr)
         data := ea_data + u8(imm)
         cpu_prefetch()
         bus_write8(addr, u8(data))
@@ -341,7 +345,7 @@ cpu_clr :: proc(opcode: u16) -> u32
                 D[reg] = D[reg] & 0xFFFFFF00
                 length = 4
             } else {
-                ea_data, addr := cpu_get_ea_data8(mode, reg)
+                addr := cpu_get_address(mode, reg)
                 bus_write8(addr, 0)
                 length = 8 + cpu_get_addr_cycles_bw(mode, reg)
             }
@@ -350,7 +354,7 @@ cpu_clr :: proc(opcode: u16) -> u32
                 D[reg] = D[reg] & 0xFFFF0000
                 length = 4
             } else {
-                ea_data, addr := cpu_get_ea_data8(mode, reg)
+                addr := cpu_get_address(mode, reg)
                 if (addr & 1) == 1 {
                     cpu_exception(.Address, addr, opcode)
                     return 54
@@ -388,7 +392,8 @@ cpu_addq :: proc(opcode: u16) -> u32
                 cpu_prefetch()
                 length += 4
             } else {
-                ea_data, addr := cpu_get_ea_data8(mode, reg)
+                addr := cpu_get_address(mode, reg)
+                ea_data := cpu_get_ea_data8(mode, reg, addr)
                 cpu_prefetch()
                 bus_write8(addr, u8(data) + (ea_data))
                 length += 8
@@ -413,7 +418,8 @@ cpu_add :: proc(opcode: u16) -> u32
 
     switch size {
         case 0:
-            ea_data, addr := cpu_get_ea_data8(mode, reg2)
+            addr := cpu_get_address(mode, reg2)
+            ea_data := cpu_get_ea_data8(mode, reg2, addr)
             cpu_prefetch()
             if dir == 1 {
                 if mode == 0 {
