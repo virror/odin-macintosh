@@ -174,7 +174,7 @@ test_run :: proc(json_data: Json_data)
         }
     }
     if cycles != json_data.length {
-        error_string = fmt.aprintf("Fail: length %d != %d", cycles, json_data.length)
+        error_string = fmt.aprintf("Fail: cycles %d != %d", cycles, json_data.length)
     }
     if error_string != "" {
         fmt.println(json_data.name)
