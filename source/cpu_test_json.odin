@@ -45,7 +45,7 @@ test_file :: proc()
 {
     //Setup
     data, err := os.read_entire_file_from_filename("tests/CLR.w.json")
-    assert(err == true)
+    assert(err == true, "Could not load test file")
     json_data: [dynamic]Json_data
     error := json.unmarshal(data, &json_data)
     if error != nil {

@@ -41,6 +41,8 @@ ssp: u32
 prefetch: [3]u16
 @(private="file")
 cycles: u32
+@(private="file")
+stop: bool
 
 cpu_init :: proc()
 {
@@ -79,7 +81,9 @@ cpu_fetch :: proc() -> u16
 
 cpu_step :: proc() -> u32
 {
-    fmt.println("Decode")
+    if stop {
+        return 0
+    }
     cycles := cpu_decode(prefetch[0])
     return cycles
 }
@@ -280,6 +284,7 @@ cpu_exception :: proc(exc: Exception, addr: u32, opcode: u16)
         ssp = bus_read32(0x00)
         pc = bus_read32(0x04)
         cpu_refetch()
+        stop = false
         return
     }
 
@@ -312,12 +317,16 @@ cpu_exception :: proc(exc: Exception, addr: u32, opcode: u16)
         case .Trace:
             exc_vec = 36
             cycles += 34
+            stop = false
         case .Uninitialized:
             exc_vec = 60
             cycles += 44 //?
         case .Spurious:
             exc_vec = 96
             cycles += 44 //?
+        case .Interrupt:
+            cycles += 44
+            stop = false
     }
     group := cpu_get_exc_group(exc)
     if group == 0 {
@@ -352,6 +361,8 @@ cpu_decode :: proc(opcode: u16) -> u32
                     cpu_reset(opcode)
                 case 0x71:      //NOP
                     cpu_nop(opcode)
+                case 0x72:      //STOP
+                    cpu_stop(opcode)
                 case:
                     fmt.printf("Unhandled opcode: 0x%X\n", opcode)
             }
@@ -475,6 +486,19 @@ cpu_reset :: proc(opcode: u16)
 cpu_nop :: proc(opcode: u16)
 {
     cycles += 4
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_stop :: proc(opcode: u16)
+{
+    if sr.super {
+        sr = SR(cpu_fetch())
+        cycles += 4
+        stop = true
+    } else {
+        cpu_trap(opcode)
+    }
     cpu_prefetch()
 }
 
