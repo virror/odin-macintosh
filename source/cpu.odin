@@ -345,6 +345,14 @@ cpu_decode :: proc(opcode: u16) -> u32
             cpu_addi(opcode)
         case 0x42:          //CLR
             cpu_clr(opcode)
+        case 0x4E:
+            sub_code := opcode & 0xFF
+            switch sub_code {
+                case 0x71:      //NOP
+                    cpu_nop(opcode)
+                case:
+                    fmt.printf("Unhandled opcode: 0x%X\n", opcode)
+            }
         case 0x50..=0x5F:
             if (opcode >> 6) & 3 == 3 {
                 fmt.printf("Unhandled opcode: 0x%X\n", opcode)
@@ -441,6 +449,13 @@ cpu_clr :: proc(opcode: u16)
     sr.z = true
     sr.v = false
     sr.c = false
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_nop :: proc(opcode: u16)
+{
+    cycles += 4
     cpu_prefetch()
 }
 
