@@ -348,6 +348,8 @@ cpu_decode :: proc(opcode: u16) -> u32
         case 0x4E:
             sub_code := opcode & 0xFF
             switch sub_code {
+                case 0x70:      //RESET
+                    cpu_reset(opcode)
                 case 0x71:      //NOP
                     cpu_nop(opcode)
                 case:
@@ -449,6 +451,23 @@ cpu_clr :: proc(opcode: u16)
     sr.z = true
     sr.v = false
     sr.c = false
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_trap :: proc(opcode: u16)
+{
+}
+
+@(private="file")
+cpu_reset :: proc(opcode: u16)
+{
+    //TODO: Reset all external devices?
+    if sr.super {
+        cycles += 132
+    } else {
+        cpu_trap(opcode)
+    }
     cpu_prefetch()
 }
 
