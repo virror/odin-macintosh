@@ -121,19 +121,33 @@ cpu_get_address :: proc(mode: u16, reg: u16, size: u16) -> u32
             addr = cpu_Areg_get(reg)
         case 3:
             addr = cpu_Areg_get(reg)
-            tmp_reg := addr
-            if size == 0 && reg == 7 {
-                tmp_reg += 2
-            } else {
-                tmp_reg += u32(size + 1)
+            tmp_addr := addr
+            switch size {
+                case 0:
+                    if reg == 7 {
+                        tmp_addr += 2
+                    } else {
+                        tmp_addr += 1
+                    }
+                case 1:
+                    tmp_addr += 2
+                case 2:
+                    tmp_addr += 4
             }
-            cpu_Areg_set(reg, tmp_reg)
+            cpu_Areg_set(reg, tmp_addr)
         case 4:
             addr = cpu_Areg_get(reg)
-            if size == 0 && reg == 7 {
-                addr -= 2
-            } else {
-                addr -= u32(size + 1)
+            switch size {
+                case 0:
+                    if reg == 7 {
+                        addr -= 2
+                    } else {
+                        addr -= 1
+                    }
+                case 1:
+                    addr -= 2
+                case 2:
+                    addr -= 4
             }
             cpu_Areg_set(reg, addr)
             cycles += 2
@@ -186,6 +200,7 @@ cpu_get_address :: proc(mode: u16, reg: u16, size: u16) -> u32
                     addr = u32(i64(ext1) + i64(pc) + i64(index_reg))
             }
     }
+
     return addr
 }
 
@@ -196,11 +211,40 @@ cpu_get_ea_data8 :: proc(mode: u16, reg: u16, addr: u32) -> u8
     if mode == 0 {
         data = u8(D[reg])
     } else if mode == 7 && reg == 4 {
-        ext1 := u8(cpu_fetch())
-        data = u8(ext1)
+        data = u8(cpu_fetch())
     } else {
         data = bus_read8(addr)
         cycles += 4
+    }
+    return data
+}
+
+@(private="file")
+cpu_get_ea_data16 :: proc(mode: u16, reg: u16, addr: u32) -> u16
+{
+    data: u16
+    if mode == 0 {
+        data = u16(D[reg])
+    } else if mode == 7 && reg == 4 {
+        data = u16(cpu_fetch())
+    } else {
+        data = bus_read16(addr)
+        cycles += 4
+    }
+    return data
+}
+
+@(private="file")
+cpu_get_ea_data32 :: proc(mode: u16, reg: u16, addr: u32) -> u32
+{
+    data: u32
+    if mode == 0 {
+        data = D[reg]
+    } else if mode == 7 && reg == 4 {
+        data = u32(cpu_fetch())
+    } else {
+        data = bus_read32(addr)
+        cycles += 8
     }
     return data
 }
@@ -360,7 +404,7 @@ cpu_clr :: proc(opcode: u16)
                 cycles += 4
             } else {
                 addr := cpu_get_address(mode, reg, size)
-                cpu_get_ea_data8(mode, reg, addr)
+                cycles += 4
                 bus_write8(addr, 0)
                 cycles += 8
             }
@@ -374,13 +418,24 @@ cpu_clr :: proc(opcode: u16)
                     cpu_exception(.Address, addr, opcode)
                     return
                 }
-                cpu_get_ea_data8(mode, reg, addr)
-                bus_write8(addr, 0)
-                bus_write8(addr + 1, 0)
+                cycles += 4
+                bus_write16(addr, 0)
                 cycles += 8
             }
         case 2:
-            fmt.println("Unhandled size: 2")
+            if mode == 0 {
+                D[reg] = 0
+                cycles += 6
+            } else {
+                addr := cpu_get_address(mode, reg, size)
+                if (addr & 1) == 1 {
+                    cpu_exception(.Address, addr, opcode)
+                    return
+                }
+                cycles += 8
+                bus_write32(addr, 0)
+                cycles += 12
+            }
     }
     sr.n = false
     sr.z = true
