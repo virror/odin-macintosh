@@ -9,6 +9,7 @@ Exception :: enum {
     Uninitialized,
     Spurious,
     Trap,
+    TrapV,
     Illegal,
     Privilege,
     Trace,
@@ -260,7 +261,7 @@ cpu_get_exc_group :: proc(exc: Exception) -> u8
             return 0
         case .Trace, .Interrupt, .Illegal, .Privilege, .Spurious, .Uninitialized:
             return 1
-        case .Trap, .CHK, .Zero:
+        case .Trap, .CHK, .Zero, .TrapV:
             return 2
     }
     return 2
@@ -307,8 +308,11 @@ cpu_exception :: proc(exc: Exception, addr: u32, opcode: u16)
         case .CHK:
             exc_vec = 24
             cycles += 40
-        case .Trap:
+        case .TrapV:
             exc_vec = 28
+            cycles += 34
+        case .Trap:
+            exc_vec = 128 + (u32(opcode & 0xF) << 2)
             cycles += 34
         case .Privilege:
             exc_vec = 32
@@ -354,15 +358,25 @@ cpu_decode :: proc(opcode: u16) -> u32
         case 0x42:              //CLR
             cpu_clr(opcode)
         case 0x4E:
-            sub_code := opcode & 0xFF
+            sub_code := (opcode >> 4) & 0xF
             switch sub_code {
-                case 0x70:      //RESET
-                    cpu_reset(opcode)
-                case 0x71:      //NOP
-                    cpu_nop(opcode)
-                case 0x72:      //STOP
-                    cpu_stop(opcode)
+                case 0x4:       //TRAP
+                    cpu_trap(opcode)
+                case 0x5:       //Link/UNLINK
+                case 0x6:       //MOVE USP
+                case 0x7:
+                    switch (opcode & 0xF) {
+                        case 0x0:      //RESET
+                            cpu_reset(opcode)
+                        case 0x1:      //NOP
+                            cpu_nop(opcode)
+                        case 0x2:      //STOP
+                            cpu_stop(opcode)
+                        case 0x6:      //TRAPV
+                            cpu_trapv(opcode)
+                    }
                 case:
+
                     fmt.printf("Unhandled opcode: 0x%X\n", opcode)
             }
         case 0x50..=0x5F:
@@ -467,6 +481,8 @@ cpu_clr :: proc(opcode: u16)
 @(private="file")
 cpu_trap :: proc(opcode: u16)
 {
+    pc += 2 //Point to the next instruction
+    cpu_exception(.Trap, 0, opcode)
 }
 
 @(private="file")
@@ -499,6 +515,19 @@ cpu_stop :: proc(opcode: u16)
     } else {
         cpu_exception(.Illegal, 0, opcode)
         return
+    }
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_trapv :: proc(opcode: u16)
+{
+    if sr.v {
+        pc += 2 //Point to the next instruction
+        cpu_exception(.TrapV, 0, opcode)
+        return
+    } else {
+        cycles += 4
     }
     cpu_prefetch()
 }
