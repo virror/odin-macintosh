@@ -204,7 +204,6 @@ cpu_get_address :: proc(mode: u16, reg: u16, size: u16) -> u32
                     addr = u32(i64(ext1) + i64(pc) + i64(index_reg))
             }
     }
-
     return addr
 }
 
@@ -335,11 +334,11 @@ cpu_exception :: proc(exc: Exception, addr: u32, opcode: u16)
         ssp -= 4
         bus_write32(ssp, addr)
         ssp -= 2
-        apa:u16= ((opcode & 0xFFE0))
-        apa |= u16(r_w) << 4
-        apa |= u16(i_n) << 3
-        apa |= function_code
-        bus_write16(ssp, apa)
+        flags:u16= ((opcode & 0xFFE0))
+        flags |= u16(r_w) << 4
+        flags |= u16(i_n) << 3
+        flags |= function_code
+        bus_write16(ssp, flags)
     }
     pc = bus_read32(exc_vec)
     cpu_refetch()
@@ -350,9 +349,9 @@ cpu_decode :: proc(opcode: u16) -> u32
     cycles = 0
     code := (opcode >> 8)
     switch code {
-        case 0x06:          //ADDI
+        case 0x06:              //ADDI
             cpu_addi(opcode)
-        case 0x42:          //CLR
+        case 0x42:              //CLR
             cpu_clr(opcode)
         case 0x4E:
             sub_code := opcode & 0xFF
@@ -369,10 +368,10 @@ cpu_decode :: proc(opcode: u16) -> u32
         case 0x50..=0x5F:
             if (opcode >> 6) & 3 == 3 {
                 fmt.printf("Unhandled opcode: 0x%X\n", opcode)
-            } else {
+            } else {            //ADDQ
                 cpu_addq(opcode)
             }
-        case 0xD0..=0xDF:   //ADD
+        case 0xD0..=0xDF:       //ADD
             cpu_add(opcode)
         case:
             fmt.printf("Unhandled opcode: 0x%X\n", opcode)
@@ -477,7 +476,8 @@ cpu_reset :: proc(opcode: u16)
     if sr.super {
         cycles += 132
     } else {
-        cpu_trap(opcode)
+        cpu_exception(.Illegal, 0, opcode)
+        return
     }
     cpu_prefetch()
 }
@@ -497,7 +497,8 @@ cpu_stop :: proc(opcode: u16)
         cycles += 4
         stop = true
     } else {
-        cpu_trap(opcode)
+        cpu_exception(.Illegal, 0, opcode)
+        return
     }
     cpu_prefetch()
 }
