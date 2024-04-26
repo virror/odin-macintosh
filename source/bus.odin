@@ -30,7 +30,7 @@ bus_read32 :: proc(address: u32) -> u32
         case 0xF00000..<0xF80000:       //Phase read*/
         case:                           //Rest of memory
             return u32(ram_mem[addr + 3]) | (u32(ram_mem[addr + 2]) << 8) |
-                   u32(ram_mem[addr + 1]) | (u32(ram_mem[addr]) << 8)
+                  (u32(ram_mem[addr + 1]) << 16) | (u32(ram_mem[addr]) << 24)
             //fmt.println(address)
             //panic("Unused mem access")
     }
