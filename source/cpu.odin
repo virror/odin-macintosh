@@ -364,6 +364,7 @@ cpu_decode :: proc(opcode: u16) -> u32
                     cpu_trap(opcode)
                 case 0x5:       //Link/UNLINK
                 case 0x6:       //MOVE USP
+                    cpu_move_usp(opcode)
                 case 0x7:
                     switch (opcode & 0xF) {
                         case 0x0:      //RESET
@@ -486,13 +487,33 @@ cpu_trap :: proc(opcode: u16)
 }
 
 @(private="file")
+cpu_move_usp :: proc(opcode: u16)
+{
+    if sr.super {
+        dir := (opcode >> 3) & 1
+        reg := (opcode >> 0) & 7
+        switch dir {
+            case 0:
+                usp = cpu_Areg_get(reg)
+            case 1:
+                cpu_Areg_set(reg, usp)
+        }
+        cycles += 4
+    } else {
+        cpu_exception(.Privilege, 0, opcode)
+        return
+    }
+    cpu_prefetch()
+}
+
+@(private="file")
 cpu_reset :: proc(opcode: u16)
 {
     //TODO: Reset all external devices?
     if sr.super {
         cycles += 132
     } else {
-        cpu_exception(.Illegal, 0, opcode)
+        cpu_exception(.Privilege, 0, opcode)
         return
     }
     cpu_prefetch()
@@ -513,7 +534,7 @@ cpu_stop :: proc(opcode: u16)
         cycles += 4
         stop = true
     } else {
-        cpu_exception(.Illegal, 0, opcode)
+        cpu_exception(.Privilege, 0, opcode)
         return
     }
     cpu_prefetch()
