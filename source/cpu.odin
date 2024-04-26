@@ -192,17 +192,17 @@ cpu_get_address :: proc(mode: u16, reg: u16, size: u16) -> u32
                     da:= ext1 >> 15
                     wl:= (ext1 >> 11) & 1
                     ireg:= (ext1 >> 12) & 7
-                    index_reg: i32
+                    index_reg: u64
                     if da == 1 {
-                        index_reg = i32(cpu_Areg_get(ireg))
+                        index_reg = u64(cpu_Areg_get(ireg))
                     } else {
-                        index_reg = i32(D[ireg])
+                        index_reg = u64(D[ireg])
                     }
                     if wl == 0 {
-                        index_reg = i32(i16(index_reg))
+                        index_reg = u64(i16(index_reg))
                     }
                     cycles += 2
-                    addr = u32(i64(ext1) + i64(pc) + i64(index_reg))
+                    addr = u32(i64(i8(ext1)) + i64(pc) + i64(index_reg))
             }
     }
     return addr
@@ -421,7 +421,9 @@ cpu_addi :: proc(opcode: u16)
     if mode == 0 {
         cycles += 4
         cpu_prefetch()
-        D[reg] += u32(u8(imm))
+        data := u32(u8(i8(imm) + i8(D[reg])))
+        D[reg] &= 0xFFFFFF00
+        D[reg] |= data
     } else {
         cycles += 8
         addr := cpu_get_address(mode, reg, size)
@@ -653,7 +655,9 @@ cpu_addq :: proc(opcode: u16)
     switch size {
         case 0:
             if mode == 0 {
-                D[reg] += u32(data)
+                data := u32(u8(i8(data) + i8(D[reg])))
+                D[reg] &= 0xFFFFFF00
+                D[reg] |= data
                 cpu_prefetch()
                 cycles += 4
             } else {
