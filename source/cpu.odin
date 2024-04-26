@@ -362,7 +362,12 @@ cpu_decode :: proc(opcode: u16) -> u32
             switch sub_code {
                 case 0x4:       //TRAP
                     cpu_trap(opcode)
-                case 0x5:       //Link/UNLINK
+                case 0x5:       //Link/UNLK
+                    if (opcode >> 3) & 1 == 0 {
+                        cpu_link(opcode)
+                    } else {
+                        cpu_unlk(opcode)
+                    }
                 case 0x6:       //MOVE USP
                     cpu_move_usp(opcode)
                 case 0x7:
@@ -484,6 +489,31 @@ cpu_trap :: proc(opcode: u16)
 {
     pc += 2 //Point to the next instruction
     cpu_exception(.Trap, 0, opcode)
+}
+
+@(private="file")
+cpu_link :: proc(opcode: u16)
+{
+    reg := (opcode >> 0) & 7
+    ssp -= 4
+    bus_write32(ssp, cpu_Areg_get(reg))
+    cpu_Areg_set(reg, ssp)
+    ssp += u32(i32(i16(cpu_fetch())))
+    cycles += 12
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_unlk :: proc(opcode: u16)
+{
+    reg := (opcode >> 0) & 7
+    ssp = cpu_Areg_get(reg)
+    cpu_Areg_set(reg, bus_read32(ssp))
+    if reg != 7 {   //TODO: Why?
+        ssp += 4
+    }
+    cycles += 12
+    cpu_prefetch()
 }
 
 @(private="file")
