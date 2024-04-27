@@ -369,6 +369,16 @@ cpu_decode :: proc(opcode: u16) -> u32
                 case:           //ORI
                     cpu_ori(opcode)
             }
+        case 0x02:
+            sub_code := opcode & 0xFF
+            switch sub_code {
+                case 0x3C:      //ANDI CCR
+                    cpu_andi_ccr(opcode)
+                case 0x7C:      //ANDI SR
+                    cpu_andi_sr(opcode)
+                case:           //ANDI
+                    cpu_andi(opcode)
+            }
         case 0x06:              //ADDI
             cpu_addi(opcode)
         case 0x42:              //CLR
@@ -422,6 +432,19 @@ cpu_decode :: proc(opcode: u16) -> u32
 
                 case:           //OR
                     cpu_or(opcode)
+
+            }
+        case 0xC0..=0xCF:
+            sub_code := (opcode >> 6) & 3
+            switch sub_code {
+                case 3:         //MULU
+
+                case 4:         //ABCD
+
+                case 7:         //MULSS or EXG
+
+                case:           //AND
+                    cpu_and(opcode)
 
             }
         case 0xD0..=0xDF:       //ADD
@@ -517,6 +540,96 @@ cpu_ori :: proc(opcode: u16)
                 cycles += 12
                 ea_data := cpu_get_ea_data32(mode, reg, addr)
                 data := ea_data | u32(imm)
+                cpu_prefetch()
+                bus_write32(addr, u32(data))
+            }
+    }
+}
+
+@(private="file")
+cpu_andi_ccr :: proc(opcode: u16)
+{
+    imm := cpu_fetch() & 0xFF
+    sr = SR(u16(sr) & imm)
+    cycles += 16
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_andi_sr :: proc(opcode: u16)
+{
+    if sr.super {
+        imm := cpu_fetch()
+        sr = SR(u16(sr) & imm)
+        cycles += 16
+        cpu_prefetch()
+    } else {
+        cpu_exception(.Privilege, 0, opcode)
+        return
+    }
+}
+
+@(private="file")
+cpu_andi :: proc(opcode: u16)
+{
+    size := (opcode >> 6) & 3
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    switch size {
+        case 0:
+            imm := i8(cpu_fetch())
+            if mode == 0 {
+                cycles += 4
+                cpu_prefetch()
+                data := u32(u8(imm & i8(D[reg])))
+                D[reg] &= 0xFFFFFF00
+                D[reg] |= data
+            } else {
+                cycles += 8
+                addr := cpu_get_address(mode, reg, size)
+                ea_data := cpu_get_ea_data8(mode, reg, addr)
+                data := ea_data & u8(imm)
+                cpu_prefetch()
+                bus_write8(addr, u8(data))
+            }
+        case 1:
+            imm := i16(cpu_fetch())
+            if mode == 0 {
+                cycles += 4
+                cpu_prefetch()
+                data := u32(u16(imm & i16(D[reg])))
+                D[reg] &= 0xFFFF0000
+                D[reg] |= data
+            } else {
+                addr := cpu_get_address(mode, reg, size)
+                if (addr & 1) == 1 {
+                    cpu_exception(.Address, addr, opcode)
+                    return
+                }
+                cycles += 8
+                ea_data := cpu_get_ea_data16(mode, reg, addr)
+                data := ea_data & u16(imm)
+                cpu_prefetch()
+                bus_write16(addr, u16(data))
+            }
+        case 2:
+            imm := i32(cpu_fetch()) << 16
+            imm |= i32(cpu_fetch())
+            if mode == 0 {
+                cycles += 8
+                cpu_prefetch()
+                data := u32(imm & i32(D[reg]))
+                D[reg] = data
+            } else {
+                addr := cpu_get_address(mode, reg, size)
+                if (addr & 1) == 1 {
+                    cpu_exception(.Address, addr, opcode)
+                    return
+                }
+                cycles += 12
+                ea_data := cpu_get_ea_data32(mode, reg, addr)
+                data := ea_data & u32(imm)
                 cpu_prefetch()
                 bus_write32(addr, u32(data))
             }
@@ -997,6 +1110,82 @@ cpu_or :: proc(opcode: u16)
                 cycles += 12
             } else {
                 data := u32(i32(ea_data) | i32(D[reg]))
+                D[reg] = data
+                cycles += 6
+                if mode <= 0 {
+                    cycles += 2
+                }
+            }
+    }
+}
+
+@(private="file")
+cpu_and :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    dir := (opcode >> 8) & 1
+    size := (opcode >> 6) & 3
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+    dest_reg: u16
+
+    switch size {
+        case 0:
+            addr := cpu_get_address(mode, reg2, size)
+            ea_data := cpu_get_ea_data8(mode, reg2, addr)
+            cpu_prefetch()
+            if dir == 1 {
+                if mode == 0 {
+                    D[reg] |= u32(ea_data)
+                } else {
+                    bus_write8(addr, u8(ea_data) & u8(D[reg]))
+                }
+                cycles += 8
+            } else {
+                data := u32(u8(i8(ea_data) & i8(D[reg])))
+                D[reg] &= 0xFFFFFF00
+                D[reg] |= data
+                cycles += 4
+            }
+        case 1:
+            addr := cpu_get_address(mode, reg2, size)
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data16(mode, reg2, addr)
+            cpu_prefetch()
+            if dir == 1 {
+                if mode == 0 {
+                    D[reg] |= u32(ea_data)
+                } else {
+                    bus_write16(addr, ea_data & u16(D[reg]))
+                }
+                cycles += 8
+            } else {
+                data := u32(u16(i16(ea_data) & i16(D[reg])))
+                D[reg] &= 0xFFFF0000
+                D[reg] |= data
+                cycles += 4
+            }
+        case 2:
+            addr := cpu_get_address(mode, reg2, size)
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data32(mode, reg2, addr)
+            cpu_prefetch()
+            if dir == 1 {
+                if mode == 0 {
+                    D[reg] |= ea_data
+                    cycles += 2
+                } else {
+                    bus_write32(addr, ea_data & D[reg])
+                }
+                cycles += 12
+            } else {
+                data := u32(i32(ea_data) & i32(D[reg]))
                 D[reg] = data
                 cycles += 6
                 if mode <= 0 {
