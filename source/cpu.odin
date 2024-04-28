@@ -391,12 +391,26 @@ cpu_decode :: proc(opcode: u16) -> u32
                 case:           //EORI
                     cpu_eori(opcode)
             }
+        case 0x40:
+            if ((opcode >> 6) & 3) == 3 {
+                cpu_move_from_sr(opcode)    //MOVE from SR
+            } else {
+                //cpu_negx      //NEGX
+            }
         case 0x42:              //CLR
             cpu_clr(opcode)
-        case 0x44:              //NEG
-            cpu_neg(opcode)
+        case 0x44:
+            if ((opcode >> 6) & 3) == 3 {
+                cpu_move_ccr(opcode)    //MOVE CCR
+            } else {
+                cpu_neg(opcode) //NEG
+            }
         case 0x46:
-            cpu_not(opcode)     //NOT
+            if ((opcode >> 6) & 3) == 3 {
+                cpu_move_to_sr(opcode)    //MOVE to SR
+            } else {
+                cpu_not(opcode) //NOT
+            }
         case 0x4E:
             sub_code := (opcode >> 4) & 0xF
             switch sub_code {
@@ -804,6 +818,70 @@ cpu_addi :: proc(opcode: u16)
             }
     }
 
+}
+
+@(private="file")
+cpu_move_from_sr :: proc(opcode: u16)
+{
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    if mode == 0 {
+        D[reg] &= 0xFFFF0000
+        D[reg] |= u32(u16(sr))
+        cycles += 6
+    } else {
+        addr := cpu_get_address(mode, reg, 1)
+        if (addr & 1) == 1 {
+            cpu_exception(.Address, addr, opcode)
+            return
+        }
+        bus_write16(addr, u16(sr))
+        cycles += 12
+    }
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_move_ccr :: proc(opcode: u16)
+{
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg, 1)
+    if (addr & 1) == 1 {
+        cpu_exception(.Address, addr, opcode)
+        return
+    }
+    ea_data := cpu_get_ea_data8(mode, reg, addr)
+    tmp_sr := u16(sr)
+    tmp_sr &= 0xFF00
+    tmp_sr |= u16(ea_data)
+    sr = SR(tmp_sr)
+    cycles += 12
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_move_to_sr :: proc(opcode: u16)
+{
+    if sr.super {
+        mode := (opcode >> 3) & 7
+        reg := (opcode >> 0) & 7
+
+        addr := cpu_get_address(mode, reg, 1)
+        if (addr & 1) == 1 {
+            cpu_exception(.Address, addr, opcode)
+            return
+        }
+        ea_data := cpu_get_ea_data16(mode, reg, addr)
+        sr = SR(ea_data)
+    } else {
+        cpu_exception(.Privilege, 0, opcode)
+        return
+    }
+    cycles += 12
+    cpu_prefetch()
 }
 
 @(private="file")
