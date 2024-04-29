@@ -380,9 +380,49 @@ cpu_exception :: proc(exc: Exception, addr: u32, opcode: u16)
 cpu_decode :: proc(opcode: u16) -> u32
 {
     cycles = 0
-    code := (opcode >> 8)
-    switch code {
-        case 0x00:
+    first := (opcode >> 12)
+    switch first {
+        case 0x0:
+            cpu_decode_0(opcode)
+        case 0x1..=0x3:
+            if (opcode >> 6)& 3 == 1 {  //MOVEA
+                //cpu_movea(opcode)
+            } else {                    //MOVE
+                //cpu_move(opcode)
+            }
+        case 0x4:
+            cpu_decode_4(opcode)
+        case 0x5:
+            cpu_decode_5(opcode)
+        case 0x6:
+            cpu_decode_6(opcode)
+        case 0x7:                       //MOVEQ
+            //cpu_moveq(opcode)
+        case 0x8:
+            cpu_decode_8(opcode)
+        case 0x9:
+            cpu_decode_9(opcode)
+        case 0xB:
+            cpu_decode_B(opcode)
+        case 0xC:
+            cpu_decode_C(opcode)
+        case 0xD:
+            cpu_decode_D(opcode)
+        case 0xE:
+            cpu_decode_E(opcode)
+    }
+    if cycles == 0 {
+        cpu_exception(.Illegal, 0, opcode)
+    }
+    return cycles
+}
+
+@(private="file")
+cpu_decode_0 :: proc(opcode: u16)
+{
+    second := (opcode >> 8) & 0xF
+    switch second {
+        case 0x0:
             sub_code := opcode & 0xFF
             switch sub_code {
                 case 0x3C:      //ORI CCR
@@ -392,7 +432,7 @@ cpu_decode :: proc(opcode: u16) -> u32
                 case:           //ORI
                     cpu_ori(opcode)
             }
-        case 0x02:
+        case 0x2:
             sub_code := opcode & 0xFF
             switch sub_code {
                 case 0x3C:      //ANDI CCR
@@ -402,11 +442,23 @@ cpu_decode :: proc(opcode: u16) -> u32
                 case:           //ANDI
                     cpu_andi(opcode)
             }
-        case 0x04:              //SUBI
+        case 0x4:               //SUBI
             cpu_subi(opcode)
-        case 0x06:              //ADDI
+        case 0x6:               //ADDI
             cpu_addi(opcode)
-        case 0x0A:
+        case 0x8:
+            sub_code := (opcode >> 6) & 3
+            switch sub_code {
+                case 0x0:       //BTST
+                    //cpu_btst(opcode)
+                case 0x1:       //BCHG
+                    //cpu_bchg(opcode)
+                case 0x2:       //BCLR
+                    //cpu_bclr(opcode)
+                case 0x3:       //BSET
+                    //cpu_bset(opcode)
+            }
+        case 0xA:
             sub_code := opcode & 0xFF
             switch sub_code {
                 case 0x3C:      //EORI CCR
@@ -416,37 +468,63 @@ cpu_decode :: proc(opcode: u16) -> u32
                 case:           //EORI
                     cpu_eori(opcode)
             }
-        case 0x40:
-            if ((opcode >> 6) & 3) == 3 {
-                cpu_move_from_sr(opcode)//MOVE from SR
-            } else {
-                //cpu_negx              //NEGX
+        case 0xC:               //CMPI
+            //cpu_cmpi(opcode)
+        case:
+            sub_code := (opcode >> 6) & 3
+            switch sub_code {
+                case 0x0:       //BTST
+                    //cpu_btst(opcode)
+                case 0x1:       //BCHG
+                    //cpu_bchg(opcode)
+                case 0x2:       //BCLR
+                    //cpu_bclr(opcode)
+                case 0x3:       //BSET
+                    //cpu_bset(opcode)
             }
-        case 0x42:                      //CLR
+    }
+}
+
+@(private="file")
+cpu_decode_4 :: proc(opcode: u16)
+{
+    second := (opcode >> 8) & 0xF
+    switch second {
+        case 0x0:
+            if (opcode >> 6) & 3 == 3 { //MOVE from SR
+                cpu_move_from_sr(opcode)
+            } else {                    //NEGX
+
+            }
+        case 0x2:                       //CLR
             cpu_clr(opcode)
-        case 0x44:
-            if ((opcode >> 6) & 3) == 3 {
-                cpu_move_ccr(opcode)    //MOVE CCR
-            } else {
-                cpu_neg(opcode)         //NEG
+        case 0x4:
+            if (opcode >> 6) & 3 == 3 { //MOVE to CCR
+                cpu_move_ccr(opcode)
+            } else {                    //NEG
+                cpu_neg(opcode)
             }
-        case 0x46:
-            if ((opcode >> 6) & 3) == 3 {
-                cpu_move_to_sr(opcode)  //MOVE to SR
-            } else {
-                cpu_not(opcode)         //NOT
+        case 0x6:
+            if (opcode >> 6) & 3 == 3 { //MOVE to SR
+                cpu_move_to_sr(opcode)
+            } else {                    //NOT
+                cpu_not(opcode)
             }
-        case 0x48:
-            if (opcode >> 7) & 1 == 1 { //EXT
+        case 0x8:
+            if (opcode & 0xFFB8) == 0x4880 {        //EXT
 
             } else if (opcode >> 3) & 0x3F == 8 {   //SWAP
                 cpu_swap(opcode)
-            } else if (opcode >> 6) & 1 == 1 {  //PEA
+            } else if (opcode >> 6) & 3 == 1 {      //PEA
                 cpu_pea(opcode)
             } else {                    //NPCD
 
             }
-        case 0x4E:
+        case 0xA:
+
+        case 0xC:   //MOVEM
+
+        case 0xE:
             sub_code := (opcode >> 4) & 0xF
             switch sub_code {
                 case 0x4:               //TRAP
@@ -470,60 +548,99 @@ cpu_decode :: proc(opcode: u16) -> u32
                         case 0x6:       //TRAPV
                             cpu_trapv(opcode)
                     }
-            }
-        case 0x50..=0x5F:
-            if (opcode >> 6) & 3 == 3 { //Scc/DBcc
-
-            } else {
-                if (opcode >> 8) & 1 == 0 {
-                    cpu_addq(opcode)    //ADDQ
-                } else {
-                    cpu_subq(opcode)    //SUBQ
-                }
-            }
-        case 0x80..=0x8F:
-            sub_code := (opcode >> 6) & 3
-            switch sub_code {
-                case 3:         //DIVU
-
-                case 4:         //SBCD
-
-                case 7:         //DIVS
-
-                case:           //OR
-                    cpu_or(opcode)
+                case:
 
             }
-        case 0x90..=0x9F:
-            if (opcode >> 6) & 3 == 3 { //SUBA
-
-            } else if (opcode & 0xF130) == 0x9100 {//SUBX
-
-            } else {            //SUB
-                cpu_sub(opcode)
-            }
-        case 0xB0..=0xBF:
-            cpu_eor(opcode)      //EOR + more...
-        case 0xC0..=0xCF:
-            sub_code := (opcode >> 6) & 3
-            switch sub_code {
-                case 3:         //MULU
-
-                case 4:         //ABCD
-
-                case 7:         //MULSS or EXG
-
-                case:           //AND
-                    cpu_and(opcode)
-
-            }
-        case 0xD0..=0xDF:       //ADD
-            cpu_add(opcode)
-        case:
-            fmt.printf("Unhandled opcode: 0x%X\n", opcode)
-            //panic("")
     }
-    return cycles
+}
+
+@(private="file")
+cpu_decode_5 :: proc(opcode: u16)
+{
+    if (opcode >> 6) & 3 == 3 { //Scc/DBcc
+
+    } else {
+        if (opcode >> 8) & 1 == 0 {
+            cpu_addq(opcode)    //ADDQ
+        } else {
+            cpu_subq(opcode)    //SUBQ
+        }
+    }
+}
+
+@(private="file")
+cpu_decode_6 :: proc(opcode: u16)
+{
+
+}
+
+@(private="file")
+cpu_decode_8 :: proc(opcode: u16)
+{
+    sub_code := (opcode >> 6) & 3
+    switch sub_code {
+        case 3:         //DIVU
+
+        case 4:         //SBCD
+
+        case 7:         //DIVS
+
+        case:           //OR
+            cpu_or(opcode)
+
+    }
+}
+
+@(private="file")
+cpu_decode_9 :: proc(opcode: u16)
+{
+    if (opcode >> 6) & 3 == 3 { //SUBA
+
+    } else if (opcode & 0xF130) == 0x9100 {//SUBX
+
+    } else {                    //SUB
+        cpu_sub(opcode)
+    }
+}
+
+@(private="file")
+cpu_decode_B :: proc(opcode: u16)
+{
+    cpu_eor(opcode)      //EOR + more...
+}
+
+@(private="file")
+cpu_decode_C :: proc(opcode: u16)
+{
+    sub_code := (opcode >> 6) & 3
+    switch sub_code {
+        case 3:         //MULU
+
+        case 4:         //ABCD
+
+        case 7:         //MULSS or EXG
+
+        case:           //AND
+            cpu_and(opcode)
+    }
+}
+
+@(private="file")
+cpu_decode_D :: proc(opcode: u16)
+{
+    if (opcode >> 6) & 3 == 3 { //ADDA
+
+    } else if (opcode & 0xF130) == 0x9100 {//ADDX
+
+    } else {                    //ADD
+        cpu_add(opcode)
+    }
+}
+
+@(private="file")
+cpu_decode_E :: proc(opcode: u16)
+{
+
 }
 
 @(private="file")
