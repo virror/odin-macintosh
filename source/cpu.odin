@@ -1087,7 +1087,7 @@ cpu_neg :: proc(opcode: u16)
         case 2:
             if mode == 0 {
                 D[reg] = u32(0 - i32(D[reg]))
-                cycles += 4
+                cycles += 6
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
@@ -1096,7 +1096,7 @@ cpu_neg :: proc(opcode: u16)
                 }
                 ea_data := cpu_get_ea_data32(mode, reg, addr)
                 bus_write32(addr, 0 - ea_data)
-                cycles += 16
+                cycles += 12
             }
     }
     cpu_prefetch()
