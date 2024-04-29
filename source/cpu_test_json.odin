@@ -4,6 +4,10 @@ import "core:fmt"
 import "core:os"
 import "core:encoding/json"
 
+TEST_ENABLE :: true
+TEST_ALL :: false
+TEST_BREAK_ERROR :: true
+
 @(private="file")
 Registers :: struct {
     d0: u32,
@@ -41,10 +45,30 @@ Json_data :: struct {
 test_fail: bool
 fail_cnt: int
 
-test_file :: proc()
+test_all :: proc()
+{
+    when TEST_ALL {
+        fd: os.Handle
+        err: os.Errno
+        info: []os.File_Info
+        fd, err = os.open("tests")
+        info, err = os.read_dir(fd, -1)
+        length := len(info)
+        for i := 0; i < length; i += 1 {
+            test_fail = false
+            fail_cnt = 0
+            fmt.println(info[i].fullpath)
+            test_file(info[i].fullpath)
+        }
+    } else {
+        test_file("tests/NEG.l.json")
+    }
+}
+
+test_file :: proc(filename: string)
 {
     //Setup
-    data, err := os.read_entire_file_from_filename("tests/CLR.w.json")
+    data, err := os.read_entire_file_from_filename(filename)
     assert(err == true, "Could not load test file")
     json_data: [dynamic]Json_data
     error := json.unmarshal(data, &json_data)
@@ -59,7 +83,7 @@ test_file :: proc()
             test_run(json_data[i])
         }
     }
-    fmt.println(fail_cnt)
+    fmt.printf("Failed: %d\n", fail_cnt)
 }
 
 @(private="file")
@@ -177,10 +201,13 @@ test_run :: proc(json_data: Json_data)
         error_string = fmt.aprintf("Fail: cycles %d != %d", cycles, json_data.length)
     }
     if error_string != "" {
-        fmt.println(json_data.name)
-        fmt.println(error_string)
-        test_fail = true
+        when TEST_BREAK_ERROR {
+            fmt.println(json_data.name)
+            fmt.println(error_string)
+            test_fail = true
+            exit = true
+        }
         fail_cnt += 1
-        exit = true
     }
+    exit = true
 }

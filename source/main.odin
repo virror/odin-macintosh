@@ -51,7 +51,9 @@ main :: proc()
     draw_debug_window(debug_render)
     render_screen()
 
-    test_file()
+    when TEST_ENABLE {
+        test_all()
+    }
 
     for !exit {
         ticks = 0
