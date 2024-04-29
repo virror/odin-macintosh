@@ -208,6 +208,29 @@ cpu_get_address :: proc(mode: u16, reg: u16, size: u16) -> u32
     return addr
 }
 
+//JMP/JSR/LEA/PEA/MEVEM
+@(private="file")
+cpu_get_cycles_lea_pea :: proc(mode: u16, reg: u16) -> u32
+{
+    addr: u32
+    switch mode {
+        case 2:
+            cycles += 12
+        case 5:
+            cycles += 16
+        case 6:
+            cycles += 20
+        case 7:
+            switch reg {
+                case 0, 2:
+                    cycles += 16
+                case 1, 3:
+                    cycles += 20
+            }
+    }
+    return addr
+}
+
 @(private="file")
 cpu_get_ea_data8 :: proc(mode: u16, reg: u16, addr: u32) -> u8
 {
@@ -395,55 +418,62 @@ cpu_decode :: proc(opcode: u16) -> u32
             }
         case 0x40:
             if ((opcode >> 6) & 3) == 3 {
-                cpu_move_from_sr(opcode)    //MOVE from SR
+                cpu_move_from_sr(opcode)//MOVE from SR
             } else {
-                //cpu_negx      //NEGX
+                //cpu_negx              //NEGX
             }
-        case 0x42:              //CLR
+        case 0x42:                      //CLR
             cpu_clr(opcode)
         case 0x44:
             if ((opcode >> 6) & 3) == 3 {
                 cpu_move_ccr(opcode)    //MOVE CCR
             } else {
-                cpu_neg(opcode) //NEG
+                cpu_neg(opcode)         //NEG
             }
         case 0x46:
             if ((opcode >> 6) & 3) == 3 {
-                cpu_move_to_sr(opcode)    //MOVE to SR
+                cpu_move_to_sr(opcode)  //MOVE to SR
             } else {
-                cpu_not(opcode) //NOT
+                cpu_not(opcode)         //NOT
+            }
+        case 0x48:
+            if (opcode >> 7) & 1 == 1 { //EXT
+
+            } else if (opcode >> 3) & 0x3F == 8 {   //SWAP
+                cpu_swap(opcode)
+            } else if (opcode >> 6) & 1 == 1 {  //PEA
+                cpu_pea(opcode)
+            } else {                    //NPCD
+
             }
         case 0x4E:
             sub_code := (opcode >> 4) & 0xF
             switch sub_code {
-                case 0x4:       //TRAP
+                case 0x4:               //TRAP
                     cpu_trap(opcode)
-                case 0x5:       //Link/UNLK
+                case 0x5:               //Link/UNLK
                     if (opcode >> 3) & 1 == 0 {
                         cpu_link(opcode)
                     } else {
                         cpu_unlk(opcode)
                     }
-                case 0x6:       //MOVE USP
+                case 0x6:               //MOVE USP
                     cpu_move_usp(opcode)
                 case 0x7:
                     switch (opcode & 0xF) {
-                        case 0x0:      //RESET
+                        case 0x0:       //RESET
                             cpu_reset(opcode)
-                        case 0x1:      //NOP
+                        case 0x1:       //NOP
                             cpu_nop(opcode)
-                        case 0x2:      //STOP
+                        case 0x2:       //STOP
                             cpu_stop(opcode)
-                        case 0x6:      //TRAPV
+                        case 0x6:       //TRAPV
                             cpu_trapv(opcode)
                     }
-                case:
-
-                    fmt.printf("Unhandled opcode: 0x%X\n", opcode)
             }
         case 0x50..=0x5F:
             if (opcode >> 6) & 3 == 3 { //Scc/DBcc
-                fmt.printf("Unhandled opcode: 0x%X\n", opcode)
+
             } else {
                 if (opcode >> 8) & 1 == 0 {
                     cpu_addq(opcode)    //ADDQ
@@ -1126,6 +1156,32 @@ cpu_not :: proc(opcode: u16)
 }
 
 @(private="file")
+cpu_swap :: proc(opcode: u16)
+{
+    reg := opcode & 7
+
+    lower := (D[reg] & 0x0000FFFF) << 16
+    upper := (D[reg] & 0xFFFF0000) >> 16
+    D[reg] = lower | upper
+    cycles += 4
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_pea :: proc(opcode: u16)
+{
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg, 2)
+    ssp -= 4
+    bus_write32(ssp, addr)
+    cycles = 0
+    cpu_get_cycles_lea_pea(mode, reg)
+    cpu_prefetch()
+}
+
+@(private="file")
 cpu_trap :: proc(opcode: u16)
 {
     pc += 2 //Point to the next instruction
@@ -1135,7 +1191,7 @@ cpu_trap :: proc(opcode: u16)
 @(private="file")
 cpu_link :: proc(opcode: u16)
 {
-    reg := (opcode >> 0) & 7
+    reg := opcode & 7
     ssp -= 4
     bus_write32(ssp, cpu_Areg_get(reg))
     cpu_Areg_set(reg, ssp)
