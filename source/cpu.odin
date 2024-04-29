@@ -208,11 +208,9 @@ cpu_get_address :: proc(mode: u16, reg: u16, size: u16) -> u32
     return addr
 }
 
-//JMP/JSR/LEA/PEA/MEVEM
 @(private="file")
-cpu_get_cycles_lea_pea :: proc(mode: u16, reg: u16) -> u32
+cpu_get_cycles_lea_pea :: proc(mode: u16, reg: u16)
 {
-    addr: u32
     switch mode {
         case 2:
             cycles += 12
@@ -228,7 +226,28 @@ cpu_get_cycles_lea_pea :: proc(mode: u16, reg: u16) -> u32
                     cycles += 20
             }
     }
-    return addr
+}
+
+@(private="file")
+cpu_get_cycles_jmp_jsr :: proc(mode: u16, reg: u16)
+{
+    switch mode {
+        case 2:
+            cycles += 16
+        case 5:
+            cycles += 18
+        case 6:
+            cycles += 22
+        case 7:
+            switch reg {
+                case 0, 2:
+                    cycles += 18
+                case 1:
+                    cycles += 20
+                case 3:
+                    cycles += 22
+            }
+    }
 }
 
 @(private="file")
@@ -512,7 +531,7 @@ cpu_decode_4 :: proc(opcode: u16)
             }
         case 0x8:
             if (opcode & 0xFFB8) == 0x4880 {        //EXT
-
+                cpu_ext(opcode)
             } else if (opcode >> 3) & 0x3F == 8 {   //SWAP
                 cpu_swap(opcode)
             } else if (opcode >> 6) & 3 == 1 {      //PEA
@@ -545,11 +564,28 @@ cpu_decode_4 :: proc(opcode: u16)
                             cpu_nop(opcode)
                         case 0x2:       //STOP
                             cpu_stop(opcode)
+                        case 0x3:       //RTE
+
+                        case 0x5:       //RTS
+
                         case 0x6:       //TRAPV
                             cpu_trapv(opcode)
+                        case 0x7:       //RTR
                     }
                 case:
+                    switch (opcode >> 6) & 7 {
+                        case 2:         //JSR
+                            //cpu_jsr(opcode)
+                        case 3:         //JMP
+                            //cpu_jmp(opcode)
+                    }
+            }
+        case:
+            switch (opcode >> 6) & 7 {
+                case 6:         //CHK
 
+                case 7:         //LEA
+                    cpu_lea(opcode)
             }
     }
 }
@@ -1273,6 +1309,25 @@ cpu_not :: proc(opcode: u16)
 }
 
 @(private="file")
+cpu_ext :: proc(opcode: u16)
+{
+    mode := (opcode >> 6) & 7
+    reg := opcode & 7
+
+    switch mode {
+        case 2:
+            data := u16(i8(D[reg]))
+            D[reg] &= 0xFFFF0000
+            D[reg] |= u32(data)
+        case 3:
+            D[reg] = u32(i16(D[reg]))
+    }
+
+    cycles += 4
+    cpu_prefetch()
+}
+
+@(private="file")
 cpu_swap :: proc(opcode: u16)
 {
     reg := opcode & 7
@@ -1394,6 +1449,21 @@ cpu_trapv :: proc(opcode: u16)
     } else {
         cycles += 4
     }
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_lea :: proc(opcode: u16)
+{
+    reg2 := (opcode >> 9) & 7
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg, 2)
+    cpu_Areg_set(reg2, addr)
+    cycles = 0
+    cpu_get_cycles_lea_pea(mode, reg)
+    cycles -= 8
     cpu_prefetch()
 }
 
