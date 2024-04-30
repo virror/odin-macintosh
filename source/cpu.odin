@@ -607,7 +607,15 @@ cpu_decode_5 :: proc(opcode: u16)
 @(private="file")
 cpu_decode_6 :: proc(opcode: u16)
 {
-
+    second := (opcode >> 8) & 0xF
+    switch second {
+        case 0x0:
+            //cpu_bra(opcode)
+        case 0x1:
+            //cpu_bsr(opcode)
+        case:
+            //cpu_bcc(opcode)
+    }
 }
 
 @(private="file")

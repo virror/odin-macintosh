@@ -176,10 +176,9 @@ test_run :: proc(json_data: Json_data)
     if ssp != json_data.final.ssp {
         error_string = fmt.aprintf("Fail: ssp %d != %d", ssp, json_data.final.ssp)
     }
-    //TODO: Test sr
-    /*if u16(sr) != json_data.final.sr {
+    if u16(sr) != json_data.final.sr {
         error_string = fmt.aprintf("Fail: sr %d != %d", u16(sr), json_data.final.sr)
-    }*/
+    }
     if prefetch[0] != json_data.final.prefetch[0] {
         error_string = fmt.aprintf("Fail: prefetch 0 %d != %d", prefetch[0], json_data.final.prefetch[0])
     }
