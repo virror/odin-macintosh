@@ -536,12 +536,20 @@ cpu_decode_4 :: proc(opcode: u16)
                 cpu_swap(opcode)
             } else if (opcode >> 6) & 3 == 1 {      //PEA
                 cpu_pea(opcode)
-            } else {                    //NPCD
+            } else {                                //NPCD
 
             }
         case 0xA:
-
-        case 0xC:   //MOVEM
+            if (opcode >> 6) & 3 == 3 {
+                if (opcode & 0x3F) == 0x3C {        //ILLEGAL
+                    cpu_illegal(opcode)
+                } else {                //TAS
+                    cpu_tas(opcode)
+                }
+            } else {                    //TST
+                cpu_tst(opcode)
+            }
+        case 0xC:                       //MOVEM
 
         case 0xE:
             sub_code := (opcode >> 4) & 0xF
@@ -1447,6 +1455,64 @@ cpu_pea :: proc(opcode: u16)
     bus_write32(ssp, addr)
     cycles = 0
     cpu_get_cycles_lea_pea(mode, reg)
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_illegal :: proc(opcode: u16)
+{
+    cpu_exception(.Illegal, 0, opcode)
+}
+
+@(private="file")
+cpu_tas :: proc(opcode: u16)
+{
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg, 0)
+    ea_data := cpu_get_ea_data8(mode, reg, addr)
+    flags8_2(ea_data)
+    ea_data |= 0x80
+    if mode == 0 {
+        D[reg] &= 0xFFFFFF00
+        D[reg] |= u32(ea_data)
+        cycles += 4
+    } else {
+        bus_write8(addr, ea_data)
+        cycles += 10
+    }
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_tst :: proc(opcode: u16)
+{
+    size := (opcode >> 6) & 3
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+    addr := cpu_get_address(mode, reg, size)
+
+    switch size {
+        case 0:
+            ea_data := cpu_get_ea_data8(mode, reg, addr)
+            flags8_2(ea_data)
+        case 1:
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data16(mode, reg, addr)
+            flags16_2(ea_data)
+        case 2:
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data32(mode, reg, addr)
+            flags32_2(ea_data)
+    }
+    cycles += 4
     cpu_prefetch()
 }
 
