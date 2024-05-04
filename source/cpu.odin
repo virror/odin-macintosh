@@ -639,7 +639,7 @@ cpu_decode_8 :: proc(opcode: u16)
 cpu_decode_9 :: proc(opcode: u16)
 {
     if (opcode >> 6) & 3 == 3 { //SUBA
-
+        cpu_suba(opcode)
     } else if (opcode & 0xF130) == 0x9100 {//SUBX
 
     } else {                    //SUB
@@ -673,7 +673,7 @@ cpu_decode_C :: proc(opcode: u16)
 cpu_decode_D :: proc(opcode: u16)
 {
     if (opcode >> 6) & 3 == 3 { //ADDA
-
+        cpu_adda(opcode)
     } else if (opcode & 0xF130) == 0x9100 {//ADDX
 
     } else {                    //ADD
@@ -1896,6 +1896,46 @@ cpu_sub :: proc(opcode: u16)
 }
 
 @(private="file")
+cpu_suba :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    size := (opcode >> 6) & 7
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+    dest_reg: u16
+
+    switch size {
+        case 3:
+            addr := cpu_get_address(mode, reg2, 1)
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data16(mode, reg2, addr)
+            areg := cpu_Areg_get(reg)
+            data:= i32(areg) - i32(i16(ea_data))
+            cpu_prefetch()
+            cpu_Areg_set(reg, u32(data))
+            cycles += 8
+        case 7:
+            addr := cpu_get_address(mode, reg2, 2)
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data32(mode, reg2, addr)
+            areg := cpu_Areg_get(reg)
+            data:= i32(areg) - i32(ea_data)
+            cpu_prefetch()
+            cpu_Areg_set(reg, u32(data))
+            cycles += 6
+            if mode <= 1 {
+                cycles += 2
+            }
+    }
+}
+
+@(private="file")
 cpu_eor :: proc(opcode: u16)
 {
     reg := (opcode >> 9) & 7
@@ -2101,6 +2141,46 @@ cpu_add :: proc(opcode: u16)
                 if mode <= 1 {
                     cycles += 2
                 }
+            }
+    }
+}
+
+@(private="file")
+cpu_adda :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    size := (opcode >> 6) & 7
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+    dest_reg: u16
+
+    switch size {
+        case 3:
+            addr := cpu_get_address(mode, reg2, 1)
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data16(mode, reg2, addr)
+            areg := cpu_Areg_get(reg)
+            data:= i32(i16(ea_data)) + i32(areg)
+            cpu_prefetch()
+            cpu_Areg_set(reg, u32(data))
+            cycles += 8
+        case 7:
+            addr := cpu_get_address(mode, reg2, 2)
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data32(mode, reg2, addr)
+            areg := cpu_Areg_get(reg)
+            data:= i32(ea_data) + i32(areg)
+            cpu_prefetch()
+            cpu_Areg_set(reg, u32(data))
+            cycles += 6
+            if mode <= 1 {
+                cycles += 2
             }
     }
 }
