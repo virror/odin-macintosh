@@ -6,6 +6,7 @@ import "core:encoding/json"
 
 TEST_ENABLE :: true
 TEST_ALL :: false
+TEST_FILE :: "tests/SUB.l.json"
 TEST_BREAK_ERROR :: true
 
 @(private="file")
@@ -59,9 +60,12 @@ test_all :: proc()
             fail_cnt = 0
             fmt.println(info[i].fullpath)
             test_file(info[i].fullpath)
+            if test_fail == true {
+                break
+            }
         }
     } else {
-        test_file("tests/NEG.l.json")
+        test_file(TEST_FILE)
     }
 }
 
