@@ -664,14 +664,16 @@ cpu_decode_B :: proc(opcode: u16)
 @(private="file")
 cpu_decode_C :: proc(opcode: u16)
 {
-    sub_code := (opcode >> 6) & 3
+    sub_code := (opcode >> 4) & 0x1F
     switch sub_code {
-        case 3:         //MULU
+        case 0x0C..=0x0F://MULU
+            cpu_mulu(opcode)
+        case 0x1C..=0x1F://MULS
+            cpu_muls(opcode)
+        case 0x10:      //ABCD
 
-        case 4:         //ABCD
-
-        case 7:         //MULSS or EXG
-
+        case 0x14, 0x18://EXG
+            cpu_exg(opcode)
         case:           //AND
             cpu_and(opcode)
     }
@@ -2067,6 +2069,87 @@ cpu_eor :: proc(opcode: u16)
 }
 
 @(private="file")
+cpu_mulu :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg2, 1)
+    if (addr & 1) == 1 {
+        cpu_exception(.Address, addr, opcode)
+        return
+    }
+    ea_data := cpu_get_ea_data16(mode, reg2, addr)
+    data, ovf := intrinsics.overflow_mul(u32(ea_data), u32(u16(D[reg])))
+    D[reg] = data
+
+    cycles += 38 + u32(intrinsics.count_ones(ea_data) * 2)
+    sr.c = false
+    sr.v = ovf
+    sr.z = data == 0
+    sr.n = bool(data >> 31)
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_muls :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg2, 1)
+    if (addr & 1) == 1 {
+        cpu_exception(.Address, addr, opcode)
+        return
+    }
+    ea_data := cpu_get_ea_data16(mode, reg2, addr)
+    data, ovf := intrinsics.overflow_mul(i32(i16(ea_data)), i32(i16(D[reg])))
+    D[reg] = u32(data)
+
+    src17 := u32(ea_data) << 1
+    n :u32= 0
+    for i in u32(0)..=15 {
+        first := (1 << (i + 1)) & src17 > 0
+        second := (1 << i) & src17 > 0
+        if first != second do n += 1
+    }
+
+    cycles += 38 + (n * 2)
+    sr.c = false
+    sr.v = ovf
+    sr.z = data == 0
+    sr.n = bool(data >> 31)
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_exg :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    mode := (opcode >> 3) & 0x1F
+    reg2 := (opcode >> 0) & 7
+
+    switch mode {
+        case 0x08:  //D D
+            tmp_reg := D[reg]
+            D[reg] = D[reg2]
+            D[reg2] = tmp_reg
+        case 0x09:  //A A
+            tmp_reg := cpu_Areg_get(reg)
+            cpu_Areg_set(reg, cpu_Areg_get(reg2))
+            cpu_Areg_set(reg2, tmp_reg)
+        case 0x11:  //D A
+            tmp_reg := D[reg]
+            D[reg] = cpu_Areg_get(reg2)
+            cpu_Areg_set(reg2, tmp_reg)
+    }
+    cycles += 6
+    cpu_prefetch()
+}
+
+@(private="file")
 cpu_and :: proc(opcode: u16)
 {
     reg := (opcode >> 9) & 7
@@ -2265,7 +2348,7 @@ flags16 :: proc(data: i16, ovf: bool, carry: bool)
     sr.c = carry            //Carry
     sr.v = ovf              //Overflow
     sr.z = data == 0        //Zero
-    sr.n = bool(data >> 15)  //Negative
+    sr.n = bool(data >> 15) //Negative
     sr.x = sr.c             //Extend
 }
 
