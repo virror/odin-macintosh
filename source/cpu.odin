@@ -293,7 +293,6 @@ cpu_get_ea_data32 :: proc(mode: u16, reg: u16, addr: u32) -> u32
     } else if mode == 7 && reg == 4 {
         data = u32(cpu_fetch()) << 16
         data |= u32(cpu_fetch())
-        cycles += 2
     } else {
         data = bus_read32(addr)
         cycles += 8
@@ -488,7 +487,7 @@ cpu_decode_0 :: proc(opcode: u16)
                     cpu_eori(opcode)
             }
         case 0xC:               //CMPI
-            //cpu_cmpi(opcode)
+            cpu_cmpi(opcode)
         case:
             sub_code := (opcode >> 6) & 3
             switch sub_code {
@@ -658,7 +657,15 @@ cpu_decode_9 :: proc(opcode: u16)
 @(private="file")
 cpu_decode_B :: proc(opcode: u16)
 {
-    cpu_eor(opcode)      //EOR + more...
+    if (opcode >> 6) & 3 == 3 {         //CMPA
+        cpu_cmpa(opcode)
+    } else if (opcode & 0x100 == 0) {   //CMP
+        cpu_cmp(opcode)
+    } else if (opcode & 0x138) == 0x108 {//CMPM
+        cpu_cmpm(opcode)
+    } else {
+        cpu_eor(opcode)                 //EOR
+    }
 }
 
 @(private="file")
@@ -997,6 +1004,77 @@ cpu_eori :: proc(opcode: u16)
                 cpu_prefetch()
                 bus_write32(addr, data)
                 flags32_2(data)
+            }
+    }
+}
+
+@(private="file")
+cpu_cmpi :: proc(opcode: u16)
+{
+    size := (opcode >> 6) & 3
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    switch size {
+        case 0:
+            imm := i8(cpu_fetch())
+            if mode == 0 {
+                cycles += 4
+                cpu_prefetch()
+                data, ovf := intrinsics.overflow_sub(i8(D[reg]), i8(imm))
+                carry := bool((u16(u8(D[reg])) - u16(u8(imm))) >> 8)
+                flags8(data, ovf, carry, false)
+            } else {
+                cycles += 4
+                addr := cpu_get_address(mode, reg, size)
+                ea_data := cpu_get_ea_data8(mode, reg, addr)
+                data, ovf := intrinsics.overflow_sub(i8(ea_data), i8(imm))
+                cpu_prefetch()
+                carry := bool((u16(u8(ea_data)) - u16(u8(imm))) >> 8)
+                flags8(data, ovf, carry, false)
+            }
+        case 1:
+            imm := i16(cpu_fetch())
+            if mode == 0 {
+                cycles += 4
+                cpu_prefetch()
+                data, ovf := intrinsics.overflow_sub(i16(D[reg]), i16(imm))
+                carry := bool((u32(u16(D[reg])) - u32(u16(imm))) >> 16)
+                flags16(data, ovf, carry, false)
+            } else {
+                addr := cpu_get_address(mode, reg, size)
+                if (addr & 1) == 1 {
+                    cpu_exception(.Address, addr, opcode)
+                    return
+                }
+                cycles += 4
+                ea_data := cpu_get_ea_data16(mode, reg, addr)
+                data, ovf := intrinsics.overflow_sub(i16(ea_data), i16(imm))
+                cpu_prefetch()
+                carry := bool((u32(u16(ea_data)) - u32(u16(imm))) >> 16)
+                flags16(data, ovf, carry, false)
+            }
+        case 2:
+            imm := i32(cpu_fetch()) << 16
+            imm |= i32(cpu_fetch())
+            if mode == 0 {
+                cycles += 6
+                cpu_prefetch()
+                data, ovf := intrinsics.overflow_sub(i32(D[reg]), i32(imm))
+                carry := bool((u64(u32(D[reg])) - u64(u32(imm))) >> 32)
+                flags32(data, ovf, carry, false)
+            } else {
+                addr := cpu_get_address(mode, reg, size)
+                if (addr & 1) == 1 {
+                    cpu_exception(.Address, addr, opcode)
+                    return
+                }
+                cycles += 4
+                ea_data := cpu_get_ea_data32(mode, reg, addr)
+                data, ovf := intrinsics.overflow_sub(i32(ea_data), i32(imm))
+                cpu_prefetch()
+                carry := bool((u64(u32(ea_data)) - u64(u32(imm))) >> 32)
+                flags32(data, ovf, carry, false)
             }
     }
 }
@@ -1877,7 +1955,7 @@ cpu_or :: proc(opcode: u16)
             } else {
                 D[reg] = data
                 cycles += 6
-                if mode <= 0 {
+                if mode <= 0 || (mode == 7 && reg2 == 4) {
                     cycles += 2
                 }
             }
@@ -1955,7 +2033,7 @@ cpu_sub :: proc(opcode: u16)
                 carry := bool((u64(D[reg]) - u64(ea_data)) >> 32)
                 D[reg] = u32(data)
                 cycles += 6
-                if mode <= 1 {
+                if mode <= 1 || (mode == 7 && reg2 == 4) {
                     cycles += 2
                 }
                 flags32(data, ovf, carry)
@@ -1997,9 +2075,150 @@ cpu_suba :: proc(opcode: u16)
             cpu_prefetch()
             cpu_Areg_set(reg, u32(data))
             cycles += 6
-            if mode <= 1 {
+            if mode <= 1 || (mode == 7 && reg2 == 4) {
                 cycles += 2
             }
+    }
+}
+
+@(private="file")
+cpu_cmpm :: proc(opcode: u16)
+{
+    regx := (opcode >> 9) & 7
+    size := (opcode >> 6) & 3
+    regy := (opcode >> 0) & 7
+
+    switch size {
+        case 0:
+            addry := cpu_get_address(3, regy, size)
+            ea_datay := bus_read8(addry)
+            addrx := cpu_get_address(3, regx, size)
+            ea_datax := bus_read8(addrx)
+            data, ovf := intrinsics.overflow_sub(i8(ea_datax), i8(ea_datay))
+            carry := bool((u16(ea_datax) - u16(ea_datay)) >> 8)
+            flags8(data, ovf, carry, false)
+            cycles += 12
+        case 1:
+            addry := cpu_get_address(3, regy, size)
+            if (addry & 1) == 1 {
+                cpu_exception(.Address, addry, opcode)
+                return
+            }
+            ea_datay := bus_read16(addry)
+            addrx := cpu_get_address(3, regx, size)
+            if (addrx & 1) == 1 {
+                cycles += 4
+                cpu_exception(.Address, addrx, opcode)
+                return
+            }
+            ea_datax := bus_read16(addrx)
+            data, ovf := intrinsics.overflow_sub(i16(ea_datax), i16(ea_datay))
+            carry := bool((u32(ea_datax) - u32(ea_datay)) >> 16)
+            flags16(data, ovf, carry, false)
+            cycles += 12
+        case 2:
+            addry := cpu_get_address(3, regy, size)
+            if (addry & 1) == 1 {
+                cpu_exception(.Address, addry, opcode)
+                return
+            }
+            ea_datay := bus_read32(addry)
+            addrx := cpu_get_address(3, regx, size)
+            if (addrx & 1) == 1 {
+                cycles += 8
+                cpu_exception(.Address, addrx, opcode)
+                return
+            }
+            ea_datax := bus_read32(addrx)
+            data, ovf := intrinsics.overflow_sub(i32(ea_datax), i32(ea_datay))
+            carry := bool((u64(ea_datax) - u64(ea_datay)) >> 32)
+            flags32(data, ovf, carry, false)
+            cycles += 20
+    }
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_cmp :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    size := (opcode >> 6) & 3
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+    dest_reg: u16
+
+    switch size {
+        case 0:
+            addr := cpu_get_address(mode, reg2, size)
+            ea_data := cpu_get_ea_data8(mode, reg2, addr)
+            cpu_prefetch()
+            data, ovf := intrinsics.overflow_sub(i8(D[reg]), i8(ea_data))
+            carry := bool((u16(u8(D[reg])) - u16(ea_data)) >> 8)
+            cycles += 4
+            flags8(data, ovf, carry, false)
+        case 1:
+            addr := cpu_get_address(mode, reg2, size)
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data16(mode, reg2, addr)
+            cpu_prefetch()
+            data, ovf := intrinsics.overflow_sub(i16(D[reg]), i16(ea_data))
+            carry := bool((u32(u16(D[reg])) - u32(ea_data)) >> 16)
+            cycles += 4
+            flags16(data, ovf, carry, false)
+        case 2:
+            addr := cpu_get_address(mode, reg2, size)
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data32(mode, reg2, addr)
+            cpu_prefetch()
+            data, ovf := intrinsics.overflow_sub(i32(D[reg]), i32(ea_data))
+            carry := bool((u64(D[reg]) - u64(ea_data)) >> 32)
+            cycles += 6
+            flags32(data, ovf, carry, false)
+    }
+}
+
+@(private="file")
+cpu_cmpa :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    size := (opcode >> 6) & 7
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+    dest_reg: u16
+
+    switch size {
+        case 3:
+            addr := cpu_get_address(mode, reg2, 1)
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := i32(i16(cpu_get_ea_data16(mode, reg2, addr)))
+            areg := cpu_Areg_get(reg)
+            data, ovf := intrinsics.overflow_sub(i32(areg), ea_data)
+            carry := bool((u64(areg) - u64(u32(ea_data))) >> 32)
+            cpu_prefetch()
+            flags32(data, ovf, carry, false)
+            cycles += 6
+        case 7:
+            addr := cpu_get_address(mode, reg2, 2)
+            if (addr & 1) == 1 {
+                cpu_exception(.Address, addr, opcode)
+                return
+            }
+            ea_data := cpu_get_ea_data32(mode, reg2, addr)
+            areg := cpu_Areg_get(reg)
+            data, ovf := intrinsics.overflow_sub(i32(areg), i32(ea_data))
+            carry := bool((u64(u32(areg)) - u64(ea_data)) >> 32)
+            cpu_prefetch()
+            cycles += 6
+            flags32(data, ovf, carry, false)
     }
 }
 
@@ -2216,7 +2435,7 @@ cpu_and :: proc(opcode: u16)
             } else {
                 D[reg] = data
                 cycles += 6
-                if mode <= 0 {
+                if mode <= 0 || (mode == 7 && reg2 == 4) {
                     cycles += 2
                 }
             }
@@ -2287,7 +2506,7 @@ cpu_add :: proc(opcode: u16)
                 data := u32(i32(ea_data) + i32(D[reg]))
                 D[reg] = u32(data)
                 cycles += 6
-                if mode <= 1 {
+                if mode <= 1 || (mode == 7 && reg2 == 4) {
                     cycles += 2
                 }
             }
@@ -2328,37 +2547,43 @@ cpu_adda :: proc(opcode: u16)
             cpu_prefetch()
             cpu_Areg_set(reg, u32(data))
             cycles += 6
-            if mode <= 1 {
+            if mode <= 1 || (mode == 7 && reg2 == 4) {
                 cycles += 2
             }
     }
 }
 
-flags8 :: proc(data: i8, ovf: bool, carry: bool)
+flags8 :: proc(data: i8, ovf: bool, carry: bool, ext:= true)
 {
     sr.c = carry            //Carry
     sr.v = ovf              //Overflow
     sr.z = data == 0        //Zero
     sr.n = bool(data >> 7)  //Negative
-    sr.x = sr.c             //Extend
+    if ext {
+        sr.x = sr.c         //Extend
+    }
 }
 
-flags16 :: proc(data: i16, ovf: bool, carry: bool)
+flags16 :: proc(data: i16, ovf: bool, carry: bool, ext:= true)
 {
     sr.c = carry            //Carry
     sr.v = ovf              //Overflow
     sr.z = data == 0        //Zero
     sr.n = bool(data >> 15) //Negative
-    sr.x = sr.c             //Extend
+    if ext {
+        sr.x = sr.c         //Extend
+    }
 }
 
-flags32 :: proc(data: i32, ovf: bool, carry: bool)
+flags32 :: proc(data: i32, ovf: bool, carry: bool, ext:= true)
 {
     sr.c = carry            //Carry
     sr.v = ovf              //Overflow
     sr.z = data == 0        //Zero
     sr.n = bool(data >> 31) //Negative
-    sr.x = sr.c             //Extend
+    if ext {
+        sr.x = sr.c         //Extend
+    }
 }
 
 flags8_2 :: proc(data: u8)

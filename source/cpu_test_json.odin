@@ -65,6 +65,7 @@ test_all :: proc()
             }
         }
     } else {
+        fmt.println(TEST_FILE)
         test_file(TEST_FILE)
     }
 }
