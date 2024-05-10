@@ -2,6 +2,7 @@ package main
 
 import "core:fmt"
 import "base:intrinsics"
+import "core:math"
 
 Exception :: enum {
     Reset,
@@ -701,7 +702,31 @@ cpu_decode_D :: proc(opcode: u16)
 @(private="file")
 cpu_decode_E :: proc(opcode: u16)
 {
-
+    if (opcode >> 6) & 3 == 3 {
+        sub_code := (opcode >> 9) & 7
+        switch sub_code {
+            case 0:
+                cpu_asd_mem(opcode)
+            case 1:
+                cpu_lsd_mem(opcode)
+            case 2:
+                cpu_roxd_mem(opcode)
+            case 3:
+                cpu_rod_mem(opcode)
+        }
+    } else {
+        sub_code := (opcode >> 3) & 3
+        switch sub_code {
+            case 0:
+                cpu_asd_reg(opcode)
+            case 1:
+                cpu_lsd_reg(opcode)
+            case 2:
+                cpu_roxd_reg(opcode)
+            case 3:
+                cpu_rod_reg(opcode)
+        }
+    }
 }
 
 @(private="file")
@@ -2553,6 +2578,603 @@ cpu_adda :: proc(opcode: u16)
     }
 }
 
+@(private="file")
+cpu_asd_mem :: proc(opcode: u16)
+{
+    dir := (opcode >> 8) & 1
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+    data: u16
+    last: bool
+    first: bool
+
+    addr := cpu_get_address(mode, reg, 1)
+    if (addr & 1) == 1 {
+        cpu_exception(.Address, addr, opcode)
+        return
+    }
+    ea_data := cpu_get_ea_data16(mode, reg, addr)
+
+    if dir == 1 {
+        data = ea_data << 1
+        last = bool(ea_data >> 15)
+        first = last
+    } else {
+        last = bool(ea_data >> 15)
+        first = bool(ea_data & 1)
+        data = ea_data >> 1
+        if last {
+            data |= 0x8000
+        }
+    }
+    bus_write16(addr, data)
+
+    sr.n = bool(data >> 15)
+    sr.v = sr.n ~ last
+    sr.z = data == 0
+    sr.x = first
+    sr.c = sr.x
+    cycles += 8
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_lsd_mem :: proc(opcode: u16)
+{
+    dir := (opcode >> 8) & 1
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+    data: u16
+    last: bool
+
+    addr := cpu_get_address(mode, reg, 1)
+    if (addr & 1) == 1 {
+        cpu_exception(.Address, addr, opcode)
+        return
+    }
+    ea_data := cpu_get_ea_data16(mode, reg, addr)
+
+    if dir == 1 {
+        data = ea_data << 1
+        last = bool(ea_data >> 15)
+    } else {
+        last = bool(ea_data & 1)
+        data = ea_data >> 1
+    }
+    bus_write16(addr, data)
+
+    sr.n = bool(data >> 15)
+    sr.v = false
+    sr.z = data == 0
+    sr.x = last
+    sr.c = sr.x
+    cycles += 8
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_roxd_mem :: proc(opcode: u16)
+{
+    dir := (opcode >> 8) & 1
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+    data: u16
+    last: bool
+
+    addr := cpu_get_address(mode, reg, 1)
+    if (addr & 1) == 1 {
+        cpu_exception(.Address, addr, opcode)
+        return
+    }
+    ea_data := cpu_get_ea_data16(mode, reg, addr)
+
+    if dir == 1 {
+        last = bool(ea_data >> 15)
+        data = (ea_data << 1) | u16(sr.x)
+    } else {
+        last = bool(ea_data & 1)
+        data = (ea_data >> 1) | (u16(sr.x) << 15)
+    }
+    bus_write16(addr, data)
+
+    sr.n = bool(data >> 15)
+    sr.v = false
+    sr.z = data == 0
+    sr.x = last
+    sr.c = sr.x
+    cycles += 8
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_rod_mem :: proc(opcode: u16)
+{
+    dir := (opcode >> 8) & 1
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+    data: u16
+    last: bool
+
+    addr := cpu_get_address(mode, reg, 1)
+    if (addr & 1) == 1 {
+        cpu_exception(.Address, addr, opcode)
+        return
+    }
+    ea_data := cpu_get_ea_data16(mode, reg, addr)
+
+    if dir == 1 {
+        last = bool(ea_data >> 15)
+        data = (ea_data << 1) | (ea_data >> 15)
+    } else {
+        last = bool(ea_data & 1)
+        data = (ea_data >> 1) | (ea_data << 15)
+    }
+    bus_write16(addr, data)
+
+    sr.n = bool(data >> 15)
+    sr.v = false
+    sr.z = data == 0
+    sr.c = last
+    cycles += 8
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_asd_reg :: proc(opcode: u16)
+{
+    reg_cnt := (opcode >> 9) & 7
+    dir := (opcode >> 8) & 1
+    size := (opcode >> 6) & 3
+    ir := (opcode >> 5) & 1
+    reg := (opcode >> 0) & 7
+    cnt: u8
+    last: bool
+
+    if ir == 1 {
+        cnt = u8(D[reg_cnt]%64)
+    } else {
+        cnt = u8(reg_cnt)
+        if reg_cnt == 0 {
+            cnt = 8
+        } else {
+            cnt = u8(reg_cnt)
+        }
+    }
+
+    sr.v = false
+
+    switch size {
+        case 0:
+            data: u8
+            cnt2 := cnt
+            if cnt2 > 8 {
+                cnt2 = 8
+            }
+            if dir == 1 {
+                first := bool((D[reg] >> 7) & 1)
+                src9 := u16(D[reg]) << 1
+                for i in u32(8 - cnt2)..=7 {
+                    second := (1 << i) & src9 > 0
+                    if first != second {
+                        sr.v = true
+                        break
+                    }
+                }
+
+                last = bool((D[reg] >> (8 - cnt)) & 1)
+                data = u8(D[reg]) << cnt
+                D[reg] &= 0xFFFFFF00
+                D[reg] |= u32(data)
+            } else {
+                last = bool((u8(D[reg]) >> (cnt - 1)) & 1)
+                data = u8(D[reg]) >> cnt
+                if D[reg] & 0x80 == 0x80 {
+                    msbs: u8
+                    for i in 0..<u32(cnt2) {
+                        msbs |= (1 << i)
+                    }
+                    msbs <<= 8 - cnt2
+                    data |= msbs
+                }
+                D[reg] &= 0xFFFFFF00
+                D[reg] |= u32(data)
+                sr.v = false
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 7)
+        case 1:
+            data: u16
+            cnt2 := cnt
+            if cnt2 > 16 {
+                cnt2 = 16
+            }
+            if dir == 1 {
+                first := bool((D[reg] >> 15) & 1)
+                src17 := u32(D[reg]) << 1
+                for i in u32(16 - cnt2)..=15 {
+                    second := (1 << i) & src17 > 0
+                    if first != second {
+                        sr.v = true
+                        break
+                    }
+                }
+
+                last = bool((D[reg] >> (16 - cnt)) & 1)
+                data = u16(D[reg]) << cnt
+                D[reg] &= 0xFFFF0000
+                D[reg] |= u32(data)
+            } else {
+                last = bool((u16(D[reg]) >> (cnt - 1)) & 1)
+                data = u16(D[reg]) >> cnt
+                if D[reg] & 0x8000 == 0x8000 {
+                    msbs: u16
+                    for i in 0..<u32(cnt2) {
+                        msbs |= (1 << i)
+                    }
+                    msbs <<= 16 - cnt2
+                    data |= msbs
+                }
+                D[reg] &= 0xFFFF0000
+                D[reg] |= u32(data)
+                sr.v = false
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 15)
+        case 2:
+            data: u32
+            cnt2 := cnt
+            if cnt2 > 32 {
+                cnt2 = 32
+            }
+            if dir == 1 {
+                first := bool((D[reg] >> 31) & 1)
+                src33 := u64(D[reg]) << 1
+                for i in u64(32 - cnt2)..=31 {
+                    second := (1 << i) & src33 > 0
+                    if first != second {
+                        sr.v = true
+                        break
+                    }
+                }
+
+                last = bool((D[reg] >> (32 - cnt)) & 1)
+                data = u32(D[reg]) << cnt
+                D[reg] = data
+            } else {
+                last = bool((D[reg] >> (cnt - 1)) & 1)
+                data = D[reg] >> cnt
+                if D[reg] & 0x80000000 == 0x80000000 {
+                    msbs: u32
+                    for i in 0..<u32(cnt2) {
+                        msbs |= (1 << i)
+                    }
+                    msbs <<= 32 - cnt2
+                    data |= msbs
+                }
+                D[reg] = data
+                sr.v = false
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 31)
+            cycles += 2
+    }
+    if cnt == 0 {
+        sr.c = false
+    } else {
+        sr.x = last
+        sr.c = sr.x
+    }
+    cycles += 6 + 2 * u32(cnt)
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_lsd_reg :: proc(opcode: u16)
+{
+    reg_cnt := (opcode >> 9) & 7
+    dir := (opcode >> 8) & 1
+    size := (opcode >> 6) & 3
+    ir := (opcode >> 5) & 1
+    reg := (opcode >> 0) & 7
+    cnt: u8
+    last: bool
+
+    if ir == 1 {
+        cnt = u8(D[reg_cnt]%64)
+    } else {
+        cnt = u8(reg_cnt)
+        if reg_cnt == 0 {
+            cnt = 8
+        } else {
+            cnt = u8(reg_cnt)
+        }
+    }
+
+    switch size {
+        case 0:
+            data: u8
+            if dir == 1 {
+                last = bool((D[reg] >> (8 - cnt)) & 1)
+                data = u8(D[reg]) << cnt
+                D[reg] &= 0xFFFFFF00
+                D[reg] |= u32(data)
+            } else {
+                last = bool((u8(D[reg]) >> (cnt - 1)) & 1)
+                data = u8(D[reg]) >> cnt
+                D[reg] &= 0xFFFFFF00
+                D[reg] |= u32(data)
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 7)
+        case 1:
+            data: u16
+            if dir == 1 {
+                last = bool((D[reg] >> (16 - cnt)) & 1)
+                data = u16(D[reg]) << cnt
+                D[reg] &= 0xFFFF0000
+                D[reg] |= u32(data)
+            } else {
+                last = bool((u16(D[reg]) >> (cnt - 1)) & 1)
+                data = u16(D[reg]) >> cnt
+                D[reg] &= 0xFFFF0000
+                D[reg] |= u32(data)
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 15)
+        case 2:
+            data: u32
+            if dir == 1 {
+                last = bool((D[reg] >> (32 - cnt)) & 1)
+                data = u32(D[reg]) << cnt
+                D[reg] = data
+            } else {
+                last = bool((D[reg] >> (cnt - 1)) & 1)
+                data = D[reg] >> cnt
+                D[reg] = data
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 31)
+            cycles += 2
+    }
+    if cnt == 0 {
+        sr.c = false
+    } else {
+        sr.x = last
+        sr.c = sr.x
+    }
+    sr.v = false
+    cycles += 6 + 2 * u32(cnt)
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_roxd_reg :: proc(opcode: u16)
+{
+    reg_cnt := (opcode >> 9) & 7
+    dir := (opcode >> 8) & 1
+    size := (opcode >> 6) & 3
+    ir := (opcode >> 5) & 1
+    reg := (opcode >> 0) & 7
+    cnt: u8
+    last: bool
+
+    if ir == 1 {
+        cnt = u8(D[reg_cnt]%64)
+    } else {
+        cnt = u8(reg_cnt)
+        if reg_cnt == 0 {
+            cnt = 8
+        } else {
+            cnt = u8(reg_cnt)
+        }
+    }
+
+    switch size {
+        case 0:
+            data: u8
+            cnt2 := cnt % 9
+            if dir == 1 {
+                last = bool((D[reg] >> (8 - cnt2)) & 1)
+                data = u8(D[reg]) << cnt2
+                rot := u8(D[reg]) >> (8 - cnt2 + 1)
+                x := u8(sr.x) << (cnt2 - 1)
+                D[reg] &= 0xFFFFFF00
+                data = data | rot | x
+                D[reg] |= u32(data)
+            } else {
+                last = bool((u8(D[reg]) >> (cnt2 - 1)) & 1)
+                data = u8(D[reg]) >> cnt2
+                rot := u8(D[reg]) << (9 - cnt2)
+                x := u8(sr.x) << (8 - cnt2)
+                D[reg] &= 0xFFFFFF00
+                data = data | rot | x
+                D[reg] |= u32(data)
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 7)
+            if (cnt2) != 0 {
+                sr.x = last
+            }
+            sr.c = sr.x
+        case 1:
+            data: u16
+            cnt2 := cnt % 17
+            if dir == 1 {
+                last = bool((D[reg] >> (16 - cnt2)) & 1)
+                data = u16(D[reg]) << cnt2
+                rot := u16(D[reg]) >> (16 - cnt2 + 1)
+                x := u16(sr.x) << (cnt2 - 1)
+                D[reg] &= 0xFFFF0000
+                data = data | rot | x
+                D[reg] |= u32(data)
+            } else {
+                last = bool((u16(D[reg]) >> (cnt2 - 1)) & 1)
+                data = u16(D[reg]) >> cnt2
+                rot := u16(D[reg]) << (17 - cnt2)
+                x := u16(sr.x) << (16 - cnt2)
+                D[reg] &= 0xFFFF0000
+                data = data | rot | x
+                D[reg] |= u32(data)
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 15)
+            if (cnt2) != 0 {
+                sr.x = last
+            }
+            sr.c = sr.x
+        case 2:
+            data: u32
+            cnt2 := cnt % 33
+            if dir == 1 {
+                last = bool((D[reg] >> (32 - cnt2)) & 1)
+                data = D[reg] << cnt2
+                rot := D[reg] >> (32 - cnt2 + 1)
+                x := u32(sr.x) << (cnt2 - 1)
+                data = data | rot | x
+                D[reg] = data
+            } else {
+                last = bool((D[reg] >> (cnt2 - 1)) & 1)
+                data = D[reg] >> cnt2
+                rot := D[reg] << (33 - cnt2)
+                x := u32(sr.x) << (32 - cnt2)
+                data = data | rot | x
+                D[reg] = data
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 31)
+            if (cnt2) != 0 {
+                sr.x = last
+            }
+            sr.c = sr.x
+            cycles += 2
+    }
+    sr.v = false
+    cycles += 6 + 2 * u32(cnt)
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_rod_reg :: proc(opcode: u16)
+{
+    reg_cnt := (opcode >> 9) & 7
+    dir := (opcode >> 8) & 1
+    size := (opcode >> 6) & 3
+    ir := (opcode >> 5) & 1
+    reg := (opcode >> 0) & 7
+    cnt: u8
+    last: bool
+
+    if ir == 1 {
+        cnt = u8(D[reg_cnt]%64)
+    } else {
+        cnt = u8(reg_cnt)
+        if reg_cnt == 0 {
+            cnt = 8
+        } else {
+            cnt = u8(reg_cnt)
+        }
+    }
+
+    switch size {
+        case 0:
+            data: u8
+            cnt2 := cnt % 8
+            if dir == 1 {
+                last = bool((D[reg] >> (8 - cnt2)) & 1)
+                if cnt2 == 0 {
+                    last = bool(D[reg] & 1)
+                }
+                data = u8(D[reg]) << cnt2
+                rot := u8(D[reg]) >> (8 - cnt2)
+                D[reg] &= 0xFFFFFF00
+                data = data | rot
+                D[reg] |= u32(data)
+            } else {
+                last = bool((u8(D[reg]) >> (cnt2 - 1)) & 1)
+                if cnt2 == 0 {
+                    last = bool((D[reg] >> 7) & 1)
+                }
+                data = u8(D[reg]) >> cnt2
+                rot := u8(D[reg]) << (8 - cnt2)
+                D[reg] &= 0xFFFFFF00
+                data = data | rot
+                D[reg] |= u32(data)
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 7)
+            if (cnt) == 0 {
+                sr.c = false
+            } else {
+                sr.c = last
+            }
+        case 1:
+            data: u16
+            cnt2 := cnt % 16
+            if dir == 1 {
+                last = bool((D[reg] >> (16 - cnt2)) & 1)
+                if cnt2 == 0 {
+                    last = bool(D[reg] & 1)
+                }
+                data = u16(D[reg]) << cnt2
+                rot := u16(D[reg]) >> (16 - cnt2)
+                D[reg] &= 0xFFFF0000
+                data = data | rot
+                D[reg] |= u32(data)
+            } else {
+                last = bool((u16(D[reg]) >> (cnt2 - 1)) & 1)
+                if cnt2 == 0 {
+                    last = bool((D[reg] >> 15) & 1)
+                }
+                data = u16(D[reg]) >> cnt2
+                rot := u16(D[reg]) << (16 - cnt2)
+                D[reg] &= 0xFFFF0000
+                data = data | rot
+                D[reg] |= u32(data)
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 15)
+            if (cnt) == 0 {
+                sr.c = false
+            } else {
+                sr.c = last
+            }
+        case 2:
+            data: u32
+            cnt2 := cnt % 32
+            if dir == 1 {
+                last = bool((D[reg] >> (32 - cnt2)) & 1)
+                if cnt2 == 0 {
+                    last = bool(D[reg] & 1)
+                }
+                data = D[reg] << cnt2
+                rot := D[reg] >> (32 - cnt2)
+                data = data | rot
+                D[reg] = data
+            } else {
+                last = bool((D[reg] >> (cnt2 - 1)) & 1)
+                if cnt2 == 0 {
+                    last = bool((D[reg] >> 31) & 1)
+                }
+                data = D[reg] >> cnt2
+                rot := D[reg] << (32 - cnt2)
+                data = data | rot
+                D[reg] = data
+            }
+            sr.z = data == 0
+            sr.n = bool(data >> 31)
+            if (cnt) == 0 {
+                sr.c = false
+            } else {
+                sr.c = last
+            }
+            cycles += 2
+    }
+    sr.v = false
+    cycles += 6 + 2 * u32(cnt)
+    cpu_prefetch()
+}
+
+@(private="file")
 flags8 :: proc(data: i8, ovf: bool, carry: bool, ext:= true)
 {
     sr.c = carry            //Carry
@@ -2564,6 +3186,7 @@ flags8 :: proc(data: i8, ovf: bool, carry: bool, ext:= true)
     }
 }
 
+@(private="file")
 flags16 :: proc(data: i16, ovf: bool, carry: bool, ext:= true)
 {
     sr.c = carry            //Carry
@@ -2575,6 +3198,7 @@ flags16 :: proc(data: i16, ovf: bool, carry: bool, ext:= true)
     }
 }
 
+@(private="file")
 flags32 :: proc(data: i32, ovf: bool, carry: bool, ext:= true)
 {
     sr.c = carry            //Carry
@@ -2586,6 +3210,7 @@ flags32 :: proc(data: i32, ovf: bool, carry: bool, ext:= true)
     }
 }
 
+@(private="file")
 flags8_2 :: proc(data: u8)
 {
     sr.c = false            //Carry
@@ -2594,6 +3219,7 @@ flags8_2 :: proc(data: u8)
     sr.n = bool(data >> 7)  //Negative
 }
 
+@(private="file")
 flags16_2 :: proc(data: u16)
 {
     sr.c = false            //Carry
@@ -2602,6 +3228,7 @@ flags16_2 :: proc(data: u16)
     sr.n = bool(data >> 15) //Negative
 }
 
+@(private="file")
 flags32_2 :: proc(data: u32)
 {
     sr.c = false            //Carry
