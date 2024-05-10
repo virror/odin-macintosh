@@ -9,6 +9,7 @@ rom_mem: [0x20000]u8
 
 bus_init :: proc()
 {
+    fmt.println("Bus init") //Get rid of unused fmt error
     file, err := os.open("Macintosh 512K.ROM", os.O_RDONLY)
     assert(err == 0, "Failed to open bios")
     _, err2 := os.read(file, rom_mem[0x00000:0x10000])

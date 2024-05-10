@@ -1,7 +1,5 @@
 package main
 
-import "core:fmt"
-import "core:strings"
 import "core:os"
 import sdl "vendor:sdl2"
 import sdlttf "vendor:sdl2/ttf"
@@ -41,8 +39,6 @@ main :: proc()
 
     debug_render := sdl.CreateRenderer(debug_window, -1, sdl.RENDERER_ACCELERATED)
 
-    ticks: u64
-
     //Emu stuff
     debug_init(debug_render)
     bus_init()
@@ -56,10 +52,8 @@ main :: proc()
     }
 
     for !exit {
-        ticks = 0
-
         if !pause || step {
-            tick := cpu_step()
+            cpu_step()
 
             if step {
                 step = false

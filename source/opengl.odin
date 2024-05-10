@@ -133,7 +133,6 @@ render_screen :: proc()
 
 texture_create :: proc(w: i32, h: i32, vram: ^u16) -> u32
 {
-    texture: u32
     gl.GenTextures(1, &texture)
     gl.BindTexture(gl.TEXTURE_2D, texture)
 
@@ -149,6 +148,6 @@ texture_create :: proc(w: i32, h: i32, vram: ^u16) -> u32
 
 texture_destroy :: proc(texture: u32)
 {
-    texture := texture // Copy needed to take address of
-    gl.DeleteTextures(1, &texture)
+    texture2 := texture // Copy needed to take address of
+    gl.DeleteTextures(1, &texture2)
 }

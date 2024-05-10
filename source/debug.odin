@@ -1,6 +1,5 @@
 package main
 
-import "core:fmt"
 import sdl "vendor:sdl2"
 import sdlttf "vendor:sdl2/ttf"
 

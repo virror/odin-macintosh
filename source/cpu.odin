@@ -2,7 +2,6 @@ package main
 
 import "core:fmt"
 import "base:intrinsics"
-import "core:math"
 
 Exception :: enum {
     Reset,
@@ -48,6 +47,7 @@ stop: bool
 
 cpu_init :: proc()
 {
+    fmt.println("Cpu init") //Get rid of unused fmt error
     //pc = 0x400000
     cpu_exception(.Reset, 0, 0)
     cpu_refetch()
@@ -86,7 +86,7 @@ cpu_step :: proc() -> u32
     if stop {
         return 0
     }
-    cycles := cpu_decode(prefetch[0])
+    cpu_decode(prefetch[0])
     return cycles
 }
 
@@ -1930,7 +1930,6 @@ cpu_or :: proc(opcode: u16)
     size := (opcode >> 6) & 3
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
-    dest_reg: u16
 
     switch size {
         case 0:
@@ -1996,7 +1995,6 @@ cpu_sub :: proc(opcode: u16)
     size := (opcode >> 6) & 3
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
-    dest_reg: u16
 
     switch size {
         case 0:
@@ -2073,7 +2071,6 @@ cpu_suba :: proc(opcode: u16)
     size := (opcode >> 6) & 7
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
-    dest_reg: u16
 
     switch size {
         case 3:
@@ -2170,7 +2167,6 @@ cpu_cmp :: proc(opcode: u16)
     size := (opcode >> 6) & 3
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
-    dest_reg: u16
 
     switch size {
         case 0:
@@ -2215,7 +2211,6 @@ cpu_cmpa :: proc(opcode: u16)
     size := (opcode >> 6) & 7
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
-    dest_reg: u16
 
     switch size {
         case 3:
@@ -2251,7 +2246,6 @@ cpu_cmpa :: proc(opcode: u16)
 cpu_eor :: proc(opcode: u16)
 {
     reg := (opcode >> 9) & 7
-    dir := (opcode >> 8) & 1
     size := (opcode >> 6) & 3
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
@@ -2401,7 +2395,6 @@ cpu_and :: proc(opcode: u16)
     size := (opcode >> 6) & 3
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
-    dest_reg: u16
 
     switch size {
         case 0:
@@ -2476,7 +2469,6 @@ cpu_add :: proc(opcode: u16)
     size := (opcode >> 6) & 3
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
-    dest_reg: u16
 
     switch size {
         case 0:
@@ -2545,7 +2537,6 @@ cpu_adda :: proc(opcode: u16)
     size := (opcode >> 6) & 7
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
-    dest_reg: u16
 
     switch size {
         case 3:

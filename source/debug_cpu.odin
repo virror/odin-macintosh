@@ -1,6 +1,5 @@
 package main
 
-import "core:fmt"
 
 @(private="file")
 last_op : string
