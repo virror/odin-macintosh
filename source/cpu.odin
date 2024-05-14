@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "core:math"
 import "base:intrinsics"
 
 Exception :: enum {
@@ -629,16 +630,18 @@ cpu_decode_6 :: proc(opcode: u16)
 @(private="file")
 cpu_decode_8 :: proc(opcode: u16)
 {
-    sub_code := (opcode >> 6) & 3
+    sub_code := (opcode >> 6) & 7
     switch sub_code {
         case 3:         //DIVU
-
-        case 4:         //SBCD
-
+            cpu_divu(opcode)
         case 7:         //DIVS
-
-        case:           //OR
-            cpu_or(opcode)
+            cpu_divs(opcode)
+        case:
+            if (opcode >> 4) & 31 == 16 {//SBCD
+                fmt.println("BLA")
+            } else {    //OR
+                cpu_or(opcode)
+            }
 
     }
 }
@@ -1920,6 +1923,118 @@ cpu_subq :: proc(opcode: u16)
                 flags32(data2, ovf, carry)
             }
     }
+}
+
+@(private="file")
+cpu_divu :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg2, 1)
+    if (addr & 1) == 1 {
+        cpu_exception(.Address, addr, opcode)
+        return
+    }
+    ea_data := cpu_get_ea_data16(mode, reg2, addr)
+    sr.c = false
+    if ea_data == 0 {
+        sr.z = false
+        sr.v = false
+        sr.n = false
+        pc -= 2
+        cpu_exception(.Zero, addr, opcode)
+        return
+    }
+
+    quot := D[reg] / u32(ea_data)
+    remind := D[reg] % u32(ea_data)
+    ovf := quot > 0xFFFF
+
+    if !ovf {
+        hdivisor := u32(ea_data) << 16
+        dividend := D[reg]
+        D[reg] = u32(quot) | u32(remind << 16)
+        cycles += 76
+
+        for i := 0; i < 15; i+=1
+	    {
+            temp := u32(dividend)
+            dividend <<= 1
+            if i32(temp) < 0 {
+                dividend -= hdivisor
+            } else {
+                cycles += 4
+                if dividend >= hdivisor {
+                    dividend -= hdivisor
+                    cycles -= 2
+                }
+            }
+        }
+        sr.n = bool(u16(quot) >> 15)
+        sr.z = quot == 0
+    } else {
+        cycles += 10
+    }
+    sr.v = ovf
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_divs :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg2, 1)
+    if (addr & 1) == 1 {
+        cpu_exception(.Address, addr, opcode)
+        return
+    }
+    ea_data := cpu_get_ea_data16(mode, reg2, addr)
+    sr.c = false
+    if ea_data == 0 {
+        cpu_exception(.Zero, addr, opcode)
+        return
+    }
+
+    cycles += 12
+    dividend := D[reg]
+    if i32(dividend) < 0 {
+        cycles += 2
+    }
+
+    quot := i32(dividend) / i32(i16(ea_data))
+    remind := i32(dividend) % i32(i16(ea_data))
+    ovf := (quot > 32767) || (quot < -32767)
+
+    if !ovf {
+        D[reg] = u32(u16(quot)) | (u32(remind) << 16)
+        cycles += 110
+        if i16(ea_data) >= 0 {
+            if i32(dividend) >= 0 {
+                cycles -= 2
+            } else {
+                cycles += 2
+            }
+        }
+
+        aquot := math.abs(i32(dividend)) / math.abs(i32(i16(ea_data)))
+        for i := 0; i < 15; i += 1 {
+		    if i16(aquot) >= 0 {
+                cycles += 2
+            }
+            aquot <<= 1
+	    }
+        sr.n = bool(u16(quot) >> 15)
+        sr.z = quot == 0
+    } else {
+        cycles += 4
+    }
+    sr.v = ovf
+    cpu_prefetch()
 }
 
 @(private="file")
