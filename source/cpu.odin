@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:math"
 import "base:intrinsics"
 
+@(private="file")
 Exception :: enum {
     Reset,
     Interrupt,
@@ -18,6 +19,13 @@ Exception :: enum {
     Address,
     Zero,
     CHK,
+}
+
+@(private="file")
+Size :: enum {
+    Byte,
+    Word,
+    Long,
 }
 
 SR :: bit_field u16 {
@@ -120,7 +128,7 @@ cpu_Areg_get :: proc(reg: u16) -> u32
 }
 
 @(private="file")
-cpu_get_address :: proc(mode: u16, reg: u16, size: u16) -> u32
+cpu_get_address :: proc(mode: u16, reg: u16, size: Size) -> u32
 {
     addr: u32
     switch mode {
@@ -130,30 +138,30 @@ cpu_get_address :: proc(mode: u16, reg: u16, size: u16) -> u32
             addr = cpu_Areg_get(reg)
             tmp_addr := addr
             switch size {
-                case 0:
+                case .Byte:
                     if reg == 7 {
                         tmp_addr += 2
                     } else {
                         tmp_addr += 1
                     }
-                case 1:
+                case .Word:
                     tmp_addr += 2
-                case 2:
+                case .Long:
                     tmp_addr += 4
             }
             cpu_Areg_set(reg, tmp_addr)
         case 4:
             addr = cpu_Areg_get(reg)
             switch size {
-                case 0:
+                case .Byte:
                     if reg == 7 {
                         addr -= 2
                     } else {
                         addr -= 1
                     }
-                case 1:
+                case .Word:
                     addr -= 2
-                case 2:
+                case .Long:
                     addr -= 4
             }
             cpu_Areg_set(reg, addr)
@@ -764,12 +772,12 @@ cpu_ori_sr :: proc(opcode: u16)
 @(private="file")
 cpu_ori :: proc(opcode: u16)
 {
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             imm := i8(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -787,7 +795,7 @@ cpu_ori :: proc(opcode: u16)
                 bus_write8(addr, u8(data))
                 flags8_2(data)
             }
-        case 1:
+        case .Word:
             imm := i16(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -809,7 +817,7 @@ cpu_ori :: proc(opcode: u16)
                 bus_write16(addr, u16(data))
                 flags16_2(data)
             }
-        case 2:
+        case .Long:
             imm := u32(cpu_fetch()) << 16
             imm |= u32(cpu_fetch())
             if mode == 0 {
@@ -865,12 +873,12 @@ cpu_andi_sr :: proc(opcode: u16)
 @(private="file")
 cpu_andi :: proc(opcode: u16)
 {
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             imm := u8(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -888,7 +896,7 @@ cpu_andi :: proc(opcode: u16)
                 bus_write8(addr, data)
                 flags8_2(data)
             }
-        case 1:
+        case .Word:
             imm := u16(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -910,7 +918,7 @@ cpu_andi :: proc(opcode: u16)
                 bus_write16(addr, u16(data))
                 flags16_2(data)
             }
-        case 2:
+        case .Long:
             imm := u32(cpu_fetch()) << 16
             imm |= u32(cpu_fetch())
             if mode == 0 {
@@ -966,12 +974,12 @@ cpu_eori_sr :: proc(opcode: u16)
 @(private="file")
 cpu_eori :: proc(opcode: u16)
 {
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             imm := u8(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -989,7 +997,7 @@ cpu_eori :: proc(opcode: u16)
                 bus_write8(addr, u8(data))
                 flags8_2(data)
             }
-        case 1:
+        case .Word:
             imm := u16(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -1011,7 +1019,7 @@ cpu_eori :: proc(opcode: u16)
                 bus_write16(addr, u16(data))
                 flags16_2(data)
             }
-        case 2:
+        case .Long:
             imm := u32(cpu_fetch()) << 16
             imm |= u32(cpu_fetch())
             if mode == 0 {
@@ -1039,12 +1047,12 @@ cpu_eori :: proc(opcode: u16)
 @(private="file")
 cpu_cmpi :: proc(opcode: u16)
 {
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             imm := i8(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -1061,7 +1069,7 @@ cpu_cmpi :: proc(opcode: u16)
                 carry := bool((u16(u8(ea_data)) - u16(u8(imm))) >> 8)
                 flags8(data, ovf, carry, false)
             }
-        case 1:
+        case .Word:
             imm := i16(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -1082,7 +1090,7 @@ cpu_cmpi :: proc(opcode: u16)
                 carry := bool((u32(u16(ea_data)) - u32(u16(imm))) >> 16)
                 flags16(data, ovf, carry, false)
             }
-        case 2:
+        case .Long:
             imm := i32(cpu_fetch()) << 16
             imm |= i32(cpu_fetch())
             if mode == 0 {
@@ -1110,12 +1118,12 @@ cpu_cmpi :: proc(opcode: u16)
 @(private="file")
 cpu_subi :: proc(opcode: u16)
 {
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             imm := i8(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -1135,7 +1143,7 @@ cpu_subi :: proc(opcode: u16)
                 carry := bool((u16(u8(ea_data)) - u16(u8(imm))) >> 8)
                 flags8(data, ovf, carry)
             }
-        case 1:
+        case .Word:
             imm := i16(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -1159,7 +1167,7 @@ cpu_subi :: proc(opcode: u16)
                 carry := bool((u32(u16(ea_data)) - u32(u16(imm))) >> 16)
                 flags16(data, ovf, carry)
             }
-        case 2:
+        case .Long:
             imm := i32(cpu_fetch()) << 16
             imm |= i32(cpu_fetch())
             if mode == 0 {
@@ -1189,12 +1197,12 @@ cpu_subi :: proc(opcode: u16)
 @(private="file")
 cpu_addi :: proc(opcode: u16)
 {
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             imm := i8(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -1214,7 +1222,7 @@ cpu_addi :: proc(opcode: u16)
                 bus_write8(addr, u8(data))
                 flags8(data, ovf, carry)
             }
-        case 1:
+        case .Word:
             imm := i16(cpu_fetch())
             if mode == 0 {
                 cycles += 4
@@ -1238,7 +1246,7 @@ cpu_addi :: proc(opcode: u16)
                 bus_write16(addr, u16(data))
                 flags16(data, ovf, carry)
             }
-        case 2:
+        case .Long:
             imm := i32(cpu_fetch()) << 16
             imm |= i32(cpu_fetch())
             if mode == 0 {
@@ -1276,7 +1284,7 @@ cpu_move_from_sr :: proc(opcode: u16)
         D[reg] |= u32(u16(sr))
         cycles += 6
     } else {
-        addr := cpu_get_address(mode, reg, 1)
+        addr := cpu_get_address(mode, reg, .Word)
         if (addr & 1) == 1 {
             cpu_exception(.Address, addr, opcode)
             return
@@ -1293,7 +1301,7 @@ cpu_move_ccr :: proc(opcode: u16)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
-    addr := cpu_get_address(mode, reg, 1)
+    addr := cpu_get_address(mode, reg, .Word)
     if (addr & 1) == 1 {
         cpu_exception(.Address, addr, opcode)
         return
@@ -1314,7 +1322,7 @@ cpu_move_to_sr :: proc(opcode: u16)
         mode := (opcode >> 3) & 7
         reg := (opcode >> 0) & 7
 
-        addr := cpu_get_address(mode, reg, 1)
+        addr := cpu_get_address(mode, reg, .Word)
         if (addr & 1) == 1 {
             cpu_exception(.Address, addr, opcode)
             return
@@ -1333,12 +1341,12 @@ cpu_move_to_sr :: proc(opcode: u16)
 @(private="file")
 cpu_clr :: proc(opcode: u16)
 {
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             if mode == 0 {
                 D[reg] = D[reg] & 0xFFFFFF00
                 cycles += 4
@@ -1348,7 +1356,7 @@ cpu_clr :: proc(opcode: u16)
                 bus_write8(addr, 0)
                 cycles += 8
             }
-        case 1:
+        case .Word:
             if mode == 0 {
                 D[reg] = D[reg] & 0xFFFF0000
                 cycles += 4
@@ -1362,7 +1370,7 @@ cpu_clr :: proc(opcode: u16)
                 bus_write16(addr, 0)
                 cycles += 8
             }
-        case 2:
+        case .Long:
             if mode == 0 {
                 D[reg] = 0
                 cycles += 6
@@ -1387,12 +1395,12 @@ cpu_clr :: proc(opcode: u16)
 @(private="file")
 cpu_neg :: proc(opcode: u16)
 {
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             if mode == 0 {
                 data, ovf := intrinsics.overflow_sub(i8(0), i8(D[reg]))
                 carry := bool((u16(0) - u16(u8(D[reg]))) >> 8)
@@ -1409,7 +1417,7 @@ cpu_neg :: proc(opcode: u16)
                 cycles += 8
                 flags8(data, ovf, carry)
             }
-        case 1:
+        case .Word:
             if mode == 0 {
                 data, ovf := intrinsics.overflow_sub(i16(0), i16(D[reg]))
                 carry := bool((u32(0) - u32(u16(D[reg]))) >> 16)
@@ -1430,7 +1438,7 @@ cpu_neg :: proc(opcode: u16)
                 cycles += 8
                 flags16(data, ovf, carry)
             }
-        case 2:
+        case .Long:
             if mode == 0 {
                 data, ovf := intrinsics.overflow_sub(i32(0), i32(D[reg]))
                 carry := bool((u64(0) - u64(u32(D[reg]))) >> 32)
@@ -1456,12 +1464,12 @@ cpu_neg :: proc(opcode: u16)
 
 cpu_not :: proc(opcode: u16)
 {
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             if mode == 0 {
                 data := ~u8(D[reg])
                 D[reg] &= 0xFFFFFF00
@@ -1476,7 +1484,7 @@ cpu_not :: proc(opcode: u16)
                 cycles += 8
                 flags8_2(data)
             }
-        case 1:
+        case .Word:
             if mode == 0 {
                 data := ~u16(D[reg])
                 D[reg] &= 0xFFFF0000
@@ -1495,7 +1503,7 @@ cpu_not :: proc(opcode: u16)
                 cycles += 8
                 flags16_2(data)
             }
-        case 2:
+        case .Long:
             if mode == 0 {
                 data :=  ~u32(D[reg])
                 D[reg] = data
@@ -1558,7 +1566,7 @@ cpu_pea :: proc(opcode: u16)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
-    addr := cpu_get_address(mode, reg, 2)
+    addr := cpu_get_address(mode, reg, .Long)
     ssp -= 4
     bus_write32(ssp, addr)
     cycles = 0
@@ -1578,7 +1586,7 @@ cpu_tas :: proc(opcode: u16)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
-    addr := cpu_get_address(mode, reg, 0)
+    addr := cpu_get_address(mode, reg, .Byte)
     ea_data := cpu_get_ea_data8(mode, reg, addr)
     flags8_2(ea_data)
     ea_data |= 0x80
@@ -1596,23 +1604,23 @@ cpu_tas :: proc(opcode: u16)
 @(private="file")
 cpu_tst :: proc(opcode: u16)
 {
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
     addr := cpu_get_address(mode, reg, size)
 
     switch size {
-        case 0:
+        case .Byte:
             ea_data := cpu_get_ea_data8(mode, reg, addr)
             flags8_2(ea_data)
-        case 1:
+        case .Word:
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data16(mode, reg, addr)
             flags16_2(ea_data)
-        case 2:
+        case .Long:
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
                 return
@@ -1730,7 +1738,7 @@ cpu_lea :: proc(opcode: u16)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
-    addr := cpu_get_address(mode, reg, 2)
+    addr := cpu_get_address(mode, reg, .Long)
     cpu_Areg_set(reg2, addr)
     cycles = 0
     cpu_get_cycles_lea_pea(mode, reg)
@@ -1745,12 +1753,12 @@ cpu_addq :: proc(opcode: u16)
     if data == 0 {
         data = 8
     }
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             if mode == 0 {
                 data2, ovf := intrinsics.overflow_add(i8(data), i8(D[reg]))
                 carry := bool((u16(data) + u16(u8(D[reg]))) >> 8)
@@ -1769,7 +1777,7 @@ cpu_addq :: proc(opcode: u16)
                 carry := bool((u16(data) + u16(u8(ea_data))) >> 8)
                 flags8(data2, ovf, carry)
             }
-        case 1:
+        case .Word:
             if mode == 0 {
                 data2, ovf := intrinsics.overflow_add(i16(data), i16(D[reg]))
                 carry := bool((u32(data) + u32(u16(D[reg]))) >> 16)
@@ -1800,7 +1808,7 @@ cpu_addq :: proc(opcode: u16)
                 carry := bool((u32(data) + u32(u16(ea_data))) >> 16)
                 flags16(data2, ovf, carry)
             }
-        case 2:
+        case .Long:
             if mode == 0 {
                 data2, ovf := intrinsics.overflow_add(i32(data), i32(D[reg]))
                 carry := bool((u64(data) + u64(u32(D[reg]))) >> 32)
@@ -1839,12 +1847,12 @@ cpu_subq :: proc(opcode: u16)
     if data == 0 {
         data = 8
     }
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             if mode == 0 {
                 data2, ovf := intrinsics.overflow_sub(i8(D[reg]), i8(data))
                 carry := bool((u16(u8(D[reg])) - u16(data)) >> 8)
@@ -1863,7 +1871,7 @@ cpu_subq :: proc(opcode: u16)
                 carry := bool((u16(ea_data) - u16(data)) >> 8)
                 flags8(data2, ovf, carry)
             }
-        case 1:
+        case .Word:
             if mode == 0 {
                 data2, ovf := intrinsics.overflow_sub(i16(D[reg]), i16(data))
                 carry := bool((u32(u16(D[reg])) - u32(u16(data))) >> 16)
@@ -1894,7 +1902,7 @@ cpu_subq :: proc(opcode: u16)
                 carry := bool((u32(ea_data) - u32(u16(data))) >> 16)
                 flags16(data2, ovf, carry)
             }
-        case 2:
+        case .Long:
             if mode == 0 {
                 data2, ovf := intrinsics.overflow_sub(i32(D[reg]), i32(data))
                 D[reg] = u32(data2)
@@ -1932,7 +1940,7 @@ cpu_divu :: proc(opcode: u16)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
 
-    addr := cpu_get_address(mode, reg2, 1)
+    addr := cpu_get_address(mode, reg2, .Word)
     if (addr & 1) == 1 {
         cpu_exception(.Address, addr, opcode)
         return
@@ -1988,7 +1996,7 @@ cpu_divs :: proc(opcode: u16)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
 
-    addr := cpu_get_address(mode, reg2, 1)
+    addr := cpu_get_address(mode, reg2, .Word)
     if (addr & 1) == 1 {
         cpu_exception(.Address, addr, opcode)
         return
@@ -2042,12 +2050,12 @@ cpu_or :: proc(opcode: u16)
 {
     reg := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             addr := cpu_get_address(mode, reg2, size)
             ea_data := cpu_get_ea_data8(mode, reg2, addr)
             data := u8(ea_data) | u8(D[reg])
@@ -2061,7 +2069,7 @@ cpu_or :: proc(opcode: u16)
                 cycles += 4
             }
             flags8_2(data)
-        case 1:
+        case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2079,7 +2087,7 @@ cpu_or :: proc(opcode: u16)
                 cycles += 4
             }
             flags16_2(data)
-        case 2:
+        case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2107,12 +2115,12 @@ cpu_sub :: proc(opcode: u16)
 {
     reg := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             addr := cpu_get_address(mode, reg2, size)
             ea_data := cpu_get_ea_data8(mode, reg2, addr)
             cpu_prefetch()
@@ -2130,7 +2138,7 @@ cpu_sub :: proc(opcode: u16)
                 cycles += 4
                 flags8(data, ovf, carry)
             }
-        case 1:
+        case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2152,7 +2160,7 @@ cpu_sub :: proc(opcode: u16)
                 cycles += 4
                 flags16(data, ovf, carry)
             }
-        case 2:
+        case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2189,7 +2197,7 @@ cpu_suba :: proc(opcode: u16)
 
     switch size {
         case 3:
-            addr := cpu_get_address(mode, reg2, 1)
+            addr := cpu_get_address(mode, reg2, .Word)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
                 return
@@ -2201,7 +2209,7 @@ cpu_suba :: proc(opcode: u16)
             cpu_Areg_set(reg, u32(data))
             cycles += 8
         case 7:
-            addr := cpu_get_address(mode, reg2, 2)
+            addr := cpu_get_address(mode, reg2, .Long)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
                 return
@@ -2222,11 +2230,11 @@ cpu_suba :: proc(opcode: u16)
 cpu_cmpm :: proc(opcode: u16)
 {
     regx := (opcode >> 9) & 7
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     regy := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             addry := cpu_get_address(3, regy, size)
             ea_datay := bus_read8(addry)
             addrx := cpu_get_address(3, regx, size)
@@ -2235,7 +2243,7 @@ cpu_cmpm :: proc(opcode: u16)
             carry := bool((u16(ea_datax) - u16(ea_datay)) >> 8)
             flags8(data, ovf, carry, false)
             cycles += 12
-        case 1:
+        case .Word:
             addry := cpu_get_address(3, regy, size)
             if (addry & 1) == 1 {
                 cpu_exception(.Address, addry, opcode)
@@ -2253,7 +2261,7 @@ cpu_cmpm :: proc(opcode: u16)
             carry := bool((u32(ea_datax) - u32(ea_datay)) >> 16)
             flags16(data, ovf, carry, false)
             cycles += 12
-        case 2:
+        case .Long:
             addry := cpu_get_address(3, regy, size)
             if (addry & 1) == 1 {
                 cpu_exception(.Address, addry, opcode)
@@ -2279,12 +2287,12 @@ cpu_cmpm :: proc(opcode: u16)
 cpu_cmp :: proc(opcode: u16)
 {
     reg := (opcode >> 9) & 7
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             addr := cpu_get_address(mode, reg2, size)
             ea_data := cpu_get_ea_data8(mode, reg2, addr)
             cpu_prefetch()
@@ -2292,7 +2300,7 @@ cpu_cmp :: proc(opcode: u16)
             carry := bool((u16(u8(D[reg])) - u16(ea_data)) >> 8)
             cycles += 4
             flags8(data, ovf, carry, false)
-        case 1:
+        case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2304,7 +2312,7 @@ cpu_cmp :: proc(opcode: u16)
             carry := bool((u32(u16(D[reg])) - u32(ea_data)) >> 16)
             cycles += 4
             flags16(data, ovf, carry, false)
-        case 2:
+        case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2329,7 +2337,7 @@ cpu_cmpa :: proc(opcode: u16)
 
     switch size {
         case 3:
-            addr := cpu_get_address(mode, reg2, 1)
+            addr := cpu_get_address(mode, reg2, .Word)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
                 return
@@ -2342,7 +2350,7 @@ cpu_cmpa :: proc(opcode: u16)
             flags32(data, ovf, carry, false)
             cycles += 6
         case 7:
-            addr := cpu_get_address(mode, reg2, 2)
+            addr := cpu_get_address(mode, reg2, .Long)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
                 return
@@ -2361,12 +2369,12 @@ cpu_cmpa :: proc(opcode: u16)
 cpu_eor :: proc(opcode: u16)
 {
     reg := (opcode >> 9) & 7
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             addr := cpu_get_address(mode, reg2, size)
             ea_data := cpu_get_ea_data8(mode, reg2, addr)
             data := u8(ea_data) ~ u8(D[reg])
@@ -2381,7 +2389,7 @@ cpu_eor :: proc(opcode: u16)
                 cycles += 8
             }
             flags8_2(data)
-        case 1:
+        case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2400,7 +2408,7 @@ cpu_eor :: proc(opcode: u16)
                 cycles += 8
             }
             flags16_2(data)
-        case 2:
+        case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2428,7 +2436,7 @@ cpu_mulu :: proc(opcode: u16)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
 
-    addr := cpu_get_address(mode, reg2, 1)
+    addr := cpu_get_address(mode, reg2, .Word)
     if (addr & 1) == 1 {
         cpu_exception(.Address, addr, opcode)
         return
@@ -2452,7 +2460,7 @@ cpu_muls :: proc(opcode: u16)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
 
-    addr := cpu_get_address(mode, reg2, 1)
+    addr := cpu_get_address(mode, reg2, .Word)
     if (addr & 1) == 1 {
         cpu_exception(.Address, addr, opcode)
         return
@@ -2507,12 +2515,12 @@ cpu_and :: proc(opcode: u16)
 {
     reg := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             addr := cpu_get_address(mode, reg2, size)
             ea_data := cpu_get_ea_data8(mode, reg2, addr)
             data := u8(ea_data) & u8(D[reg])
@@ -2526,7 +2534,7 @@ cpu_and :: proc(opcode: u16)
                 cycles += 4
             }
             flags8_2(data)
-        case 1:
+        case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2548,7 +2556,7 @@ cpu_and :: proc(opcode: u16)
                 cycles += 4
             }
             flags16_2(data)
-        case 2:
+        case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2581,12 +2589,12 @@ cpu_add :: proc(opcode: u16)
 {
     reg := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     mode := (opcode >> 3) & 7
     reg2 := (opcode >> 0) & 7
 
     switch size {
-        case 0:
+        case .Byte:
             addr := cpu_get_address(mode, reg2, size)
             ea_data := cpu_get_ea_data8(mode, reg2, addr)
             data, ovf := intrinsics.overflow_add(i8(ea_data), i8(D[reg]))
@@ -2601,7 +2609,7 @@ cpu_add :: proc(opcode: u16)
                 D[reg] |= u32(u8(data))
                 cycles += 4
             }
-        case 1:
+        case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2620,7 +2628,7 @@ cpu_add :: proc(opcode: u16)
                 D[reg] |= u32(u16(data))
                 cycles += 4
             }
-        case 2:
+        case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
@@ -2655,7 +2663,7 @@ cpu_adda :: proc(opcode: u16)
 
     switch size {
         case 3:
-            addr := cpu_get_address(mode, reg2, 1)
+            addr := cpu_get_address(mode, reg2, .Word)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
                 return
@@ -2667,7 +2675,7 @@ cpu_adda :: proc(opcode: u16)
             cpu_Areg_set(reg, u32(data))
             cycles += 8
         case 7:
-            addr := cpu_get_address(mode, reg2, 2)
+            addr := cpu_get_address(mode, reg2, .Long)
             if (addr & 1) == 1 {
                 cpu_exception(.Address, addr, opcode)
                 return
@@ -2694,7 +2702,7 @@ cpu_asd_mem :: proc(opcode: u16)
     last: bool
     first: bool
 
-    addr := cpu_get_address(mode, reg, 1)
+    addr := cpu_get_address(mode, reg, .Word)
     if (addr & 1) == 1 {
         cpu_exception(.Address, addr, opcode)
         return
@@ -2733,7 +2741,7 @@ cpu_lsd_mem :: proc(opcode: u16)
     data: u16
     last: bool
 
-    addr := cpu_get_address(mode, reg, 1)
+    addr := cpu_get_address(mode, reg, .Word)
     if (addr & 1) == 1 {
         cpu_exception(.Address, addr, opcode)
         return
@@ -2767,7 +2775,7 @@ cpu_roxd_mem :: proc(opcode: u16)
     data: u16
     last: bool
 
-    addr := cpu_get_address(mode, reg, 1)
+    addr := cpu_get_address(mode, reg, .Word)
     if (addr & 1) == 1 {
         cpu_exception(.Address, addr, opcode)
         return
@@ -2801,7 +2809,7 @@ cpu_rod_mem :: proc(opcode: u16)
     data: u16
     last: bool
 
-    addr := cpu_get_address(mode, reg, 1)
+    addr := cpu_get_address(mode, reg, .Word)
     if (addr & 1) == 1 {
         cpu_exception(.Address, addr, opcode)
         return
@@ -2830,7 +2838,7 @@ cpu_asd_reg :: proc(opcode: u16)
 {
     reg_cnt := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     ir := (opcode >> 5) & 1
     reg := (opcode >> 0) & 7
     cnt: u8
@@ -2846,11 +2854,10 @@ cpu_asd_reg :: proc(opcode: u16)
             cnt = u8(reg_cnt)
         }
     }
-
     sr.v = false
 
     switch size {
-        case 0:
+        case .Byte:
             data: u8
             cnt2 := cnt
             if cnt2 > 8 {
@@ -2888,7 +2895,7 @@ cpu_asd_reg :: proc(opcode: u16)
             }
             sr.z = data == 0
             sr.n = bool(data >> 7)
-        case 1:
+        case .Word:
             data: u16
             cnt2 := cnt
             if cnt2 > 16 {
@@ -2926,7 +2933,7 @@ cpu_asd_reg :: proc(opcode: u16)
             }
             sr.z = data == 0
             sr.n = bool(data >> 15)
-        case 2:
+        case .Long:
             data: u32
             cnt2 := cnt
             if cnt2 > 32 {
@@ -2979,7 +2986,7 @@ cpu_lsd_reg :: proc(opcode: u16)
 {
     reg_cnt := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     ir := (opcode >> 5) & 1
     reg := (opcode >> 0) & 7
     cnt: u8
@@ -2997,7 +3004,7 @@ cpu_lsd_reg :: proc(opcode: u16)
     }
 
     switch size {
-        case 0:
+        case .Byte:
             data: u8
             if dir == 1 {
                 last = bool((D[reg] >> (8 - cnt)) & 1)
@@ -3012,7 +3019,7 @@ cpu_lsd_reg :: proc(opcode: u16)
             }
             sr.z = data == 0
             sr.n = bool(data >> 7)
-        case 1:
+        case .Word:
             data: u16
             if dir == 1 {
                 last = bool((D[reg] >> (16 - cnt)) & 1)
@@ -3027,7 +3034,7 @@ cpu_lsd_reg :: proc(opcode: u16)
             }
             sr.z = data == 0
             sr.n = bool(data >> 15)
-        case 2:
+        case .Long:
             data: u32
             if dir == 1 {
                 last = bool((D[reg] >> (32 - cnt)) & 1)
@@ -3058,7 +3065,7 @@ cpu_roxd_reg :: proc(opcode: u16)
 {
     reg_cnt := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     ir := (opcode >> 5) & 1
     reg := (opcode >> 0) & 7
     cnt: u8
@@ -3076,7 +3083,7 @@ cpu_roxd_reg :: proc(opcode: u16)
     }
 
     switch size {
-        case 0:
+        case .Byte:
             data: u8
             cnt2 := cnt % 9
             if dir == 1 {
@@ -3102,7 +3109,7 @@ cpu_roxd_reg :: proc(opcode: u16)
                 sr.x = last
             }
             sr.c = sr.x
-        case 1:
+        case .Word:
             data: u16
             cnt2 := cnt % 17
             if dir == 1 {
@@ -3128,7 +3135,7 @@ cpu_roxd_reg :: proc(opcode: u16)
                 sr.x = last
             }
             sr.c = sr.x
-        case 2:
+        case .Long:
             data: u32
             cnt2 := cnt % 33
             if dir == 1 {
@@ -3164,7 +3171,7 @@ cpu_rod_reg :: proc(opcode: u16)
 {
     reg_cnt := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
-    size := (opcode >> 6) & 3
+    size := Size((opcode >> 6) & 3)
     ir := (opcode >> 5) & 1
     reg := (opcode >> 0) & 7
     cnt: u8
@@ -3182,7 +3189,7 @@ cpu_rod_reg :: proc(opcode: u16)
     }
 
     switch size {
-        case 0:
+        case .Byte:
             data: u8
             cnt2 := cnt % 8
             if dir == 1 {
@@ -3213,7 +3220,7 @@ cpu_rod_reg :: proc(opcode: u16)
             } else {
                 sr.c = last
             }
-        case 1:
+        case .Word:
             data: u16
             cnt2 := cnt % 16
             if dir == 1 {
@@ -3244,7 +3251,7 @@ cpu_rod_reg :: proc(opcode: u16)
             } else {
                 sr.c = last
             }
-        case 2:
+        case .Long:
             data: u32
             cnt2 := cnt % 32
             if dir == 1 {
