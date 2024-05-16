@@ -58,7 +58,7 @@ cpu_init :: proc()
 {
     fmt.println("Cpu init") //Get rid of unused fmt error
     //pc = 0x400000
-    cpu_exception(.Reset, 0, 0)
+    cpu_exception_reset()
     cpu_refetch()
 }
 
@@ -324,38 +324,32 @@ cpu_get_exc_group :: proc(exc: Exception) -> u8
     return 2
 }
 
-// TODO: Still needs loads of work
 @(private="file")
-cpu_exception :: proc(exc: Exception, addr: u32, opcode: u16)
+cpu_exception_reset :: proc()
+{
+    sr.super = true
+    sr.trace = 0
+    sr.intr_mask = 7    //TODO; Check this
+    ssp = bus_read32(0x00)
+    pc = bus_read32(0x04)
+    cpu_refetch()
+    stop = false
+}
+
+@(private="file")
+cpu_exception :: proc(exc: Exception, opcode: u16)
 {
     exc_vec: u32
-    function_code :u16= 5
-    r_w := true
-    i_n := false
     tmp_sr := u16(sr)
     sr.super = true
     sr.trace = 0
     sr.intr_mask = 7    //TODO; Check this
-
-    if exc == .Reset {
-        ssp = bus_read32(0x00)
-        pc = bus_read32(0x04)
-        cpu_refetch()
-        stop = false
-        return
-    }
 
     ssp -= 4
     bus_write32(ssp, pc)
     ssp -= 2
     bus_write16(ssp, tmp_sr)
     #partial switch exc {
-        case .Bus:
-            exc_vec = 8
-            cycles += 50
-        case .Address:
-            exc_vec = 12
-            cycles += 50
         case .Illegal:
             exc_vec = 16
             cycles += 34
@@ -388,19 +382,45 @@ cpu_exception :: proc(exc: Exception, addr: u32, opcode: u16)
             cycles += 44
             stop = false
     }
-    group := cpu_get_exc_group(exc)
-    if group == 0 {
-        ssp -= 2
-        bus_write16(ssp, opcode)
-        ssp -= 4
-        bus_write32(ssp, addr)
-        ssp -= 2
-        flags:u16= ((opcode & 0xFFE0))
-        flags |= u16(r_w) << 4
-        flags |= u16(i_n) << 3
-        flags |= function_code
-        bus_write16(ssp, flags)
+    pc = bus_read32(exc_vec)
+    cpu_refetch()
+}
+
+// TODO: Still needs loads of work
+@(private="file")
+cpu_exception_addr :: proc(exc: Exception, addr: u32, opcode: u16)
+{
+    exc_vec: u32
+    function_code :u16= 5
+    r_w := true
+    i_n := false
+    tmp_sr := u16(sr)
+    sr.super = true
+    sr.trace = 0
+    sr.intr_mask = 7    //TODO; Check this
+
+    ssp -= 4
+    bus_write32(ssp, pc)
+    ssp -= 2
+    bus_write16(ssp, tmp_sr)
+    #partial switch exc {
+        case .Bus:
+            exc_vec = 8
+            cycles += 50
+        case .Address:
+            exc_vec = 12
+            cycles += 50
     }
+    ssp -= 2
+    bus_write16(ssp, opcode)
+    ssp -= 4
+    bus_write32(ssp, addr)
+    ssp -= 2
+    flags:u16= ((opcode & 0xFFE0))
+    flags |= u16(r_w) << 4
+    flags |= u16(i_n) << 3
+    flags |= function_code
+    bus_write16(ssp, flags)
     pc = bus_read32(exc_vec)
     cpu_refetch()
 }
@@ -440,7 +460,7 @@ cpu_decode :: proc(opcode: u16) -> u32
             cpu_decode_E(opcode)
     }
     if cycles == 0 {
-        cpu_exception(.Illegal, 0, opcode)
+        cpu_exception(.Illegal, opcode)
     }
     return cycles
 }
@@ -764,7 +784,7 @@ cpu_ori_sr :: proc(opcode: u16)
         cpu_prefetch()
 
     } else {
-        cpu_exception(.Privilege, 0, opcode)
+        cpu_exception(.Privilege, opcode)
         return
     }
 }
@@ -807,7 +827,7 @@ cpu_ori :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 8
@@ -829,7 +849,7 @@ cpu_ori :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 12
@@ -865,7 +885,7 @@ cpu_andi_sr :: proc(opcode: u16)
         cycles += 16
         cpu_prefetch()
     } else {
-        cpu_exception(.Privilege, 0, opcode)
+        cpu_exception(.Privilege, opcode)
         return
     }
 }
@@ -908,7 +928,7 @@ cpu_andi :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 8
@@ -930,7 +950,7 @@ cpu_andi :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 12
@@ -966,7 +986,7 @@ cpu_eori_sr :: proc(opcode: u16)
         cycles += 16
         cpu_prefetch()
     } else {
-        cpu_exception(.Privilege, 0, opcode)
+        cpu_exception(.Privilege, opcode)
         return
     }
 }
@@ -1009,7 +1029,7 @@ cpu_eori :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 8
@@ -1031,7 +1051,7 @@ cpu_eori :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 12
@@ -1080,7 +1100,7 @@ cpu_cmpi :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 4
@@ -1102,7 +1122,7 @@ cpu_cmpi :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 4
@@ -1156,7 +1176,7 @@ cpu_subi :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 8
@@ -1180,7 +1200,7 @@ cpu_subi :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 12
@@ -1235,7 +1255,7 @@ cpu_addi :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 8
@@ -1259,7 +1279,7 @@ cpu_addi :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 12
@@ -1286,7 +1306,7 @@ cpu_move_from_sr :: proc(opcode: u16)
     } else {
         addr := cpu_get_address(mode, reg, .Word)
         if (addr & 1) == 1 {
-            cpu_exception(.Address, addr, opcode)
+            cpu_exception_addr(.Address, addr, opcode)
             return
         }
         bus_write16(addr, u16(sr))
@@ -1303,7 +1323,7 @@ cpu_move_ccr :: proc(opcode: u16)
 
     addr := cpu_get_address(mode, reg, .Word)
     if (addr & 1) == 1 {
-        cpu_exception(.Address, addr, opcode)
+        cpu_exception_addr(.Address, addr, opcode)
         return
     }
     ea_data := cpu_get_ea_data16(mode, reg, addr) & 0x1F
@@ -1324,14 +1344,14 @@ cpu_move_to_sr :: proc(opcode: u16)
 
         addr := cpu_get_address(mode, reg, .Word)
         if (addr & 1) == 1 {
-            cpu_exception(.Address, addr, opcode)
+            cpu_exception_addr(.Address, addr, opcode)
             return
         }
         ea_data := cpu_get_ea_data16(mode, reg, addr)
         ea_data &= 0xA71F
         sr = SR(ea_data)
     } else {
-        cpu_exception(.Privilege, 0, opcode)
+        cpu_exception(.Privilege, opcode)
         return
     }
     cycles += 12
@@ -1363,7 +1383,7 @@ cpu_clr :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 4
@@ -1377,7 +1397,7 @@ cpu_clr :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 cycles += 8
@@ -1428,7 +1448,7 @@ cpu_neg :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 ea_data := cpu_get_ea_data16(mode, reg, addr)
@@ -1448,7 +1468,7 @@ cpu_neg :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 ea_data := cpu_get_ea_data32(mode, reg, addr)
@@ -1494,7 +1514,7 @@ cpu_not :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 ea_data := cpu_get_ea_data16(mode, reg, addr)
@@ -1512,7 +1532,7 @@ cpu_not :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 ea_data := cpu_get_ea_data32(mode, reg, addr)
@@ -1577,7 +1597,7 @@ cpu_pea :: proc(opcode: u16)
 @(private="file")
 cpu_illegal :: proc(opcode: u16)
 {
-    cpu_exception(.Illegal, 0, opcode)
+    cpu_exception(.Illegal, opcode)
 }
 
 @(private="file")
@@ -1615,14 +1635,14 @@ cpu_tst :: proc(opcode: u16)
             flags8_2(ea_data)
         case .Word:
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data16(mode, reg, addr)
             flags16_2(ea_data)
         case .Long:
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data32(mode, reg, addr)
@@ -1636,7 +1656,7 @@ cpu_tst :: proc(opcode: u16)
 cpu_trap :: proc(opcode: u16)
 {
     pc += 2 //Point to the next instruction
-    cpu_exception(.Trap, 0, opcode)
+    cpu_exception(.Trap, opcode)
 }
 
 @(private="file")
@@ -1678,7 +1698,7 @@ cpu_move_usp :: proc(opcode: u16)
         }
         cycles += 4
     } else {
-        cpu_exception(.Privilege, 0, opcode)
+        cpu_exception(.Privilege, opcode)
         return
     }
     cpu_prefetch()
@@ -1691,7 +1711,7 @@ cpu_reset :: proc(opcode: u16)
     if sr.super {
         cycles += 132
     } else {
-        cpu_exception(.Privilege, 0, opcode)
+        cpu_exception(.Privilege, opcode)
         return
     }
     cpu_prefetch()
@@ -1712,7 +1732,7 @@ cpu_stop :: proc(opcode: u16)
         cycles += 4
         stop = true
     } else {
-        cpu_exception(.Privilege, 0, opcode)
+        cpu_exception(.Privilege, opcode)
         return
     }
     cpu_prefetch()
@@ -1723,7 +1743,7 @@ cpu_trapv :: proc(opcode: u16)
 {
     if sr.v {
         pc += 2 //Point to the next instruction
-        cpu_exception(.TrapV, 0, opcode)
+        cpu_exception(.TrapV, opcode)
         return
     } else {
         cycles += 4
@@ -1797,7 +1817,7 @@ cpu_addq :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 ea_data := cpu_get_ea_data16(mode, reg, addr)
@@ -1826,7 +1846,7 @@ cpu_addq :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 ea_data := cpu_get_ea_data32(mode, reg, addr)
@@ -1891,7 +1911,7 @@ cpu_subq :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 ea_data := cpu_get_ea_data16(mode, reg, addr)
@@ -1919,7 +1939,7 @@ cpu_subq :: proc(opcode: u16)
             } else {
                 addr := cpu_get_address(mode, reg, size)
                 if (addr & 1) == 1 {
-                    cpu_exception(.Address, addr, opcode)
+                    cpu_exception_addr(.Address, addr, opcode)
                     return
                 }
                 ea_data := cpu_get_ea_data32(mode, reg, addr)
@@ -1942,7 +1962,7 @@ cpu_divu :: proc(opcode: u16)
 
     addr := cpu_get_address(mode, reg2, .Word)
     if (addr & 1) == 1 {
-        cpu_exception(.Address, addr, opcode)
+        cpu_exception_addr(.Address, addr, opcode)
         return
     }
     ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -1952,7 +1972,7 @@ cpu_divu :: proc(opcode: u16)
         sr.v = false
         sr.n = false
         pc -= 2
-        cpu_exception(.Zero, addr, opcode)
+        cpu_exception(.Zero, opcode)
         return
     }
 
@@ -1998,13 +2018,13 @@ cpu_divs :: proc(opcode: u16)
 
     addr := cpu_get_address(mode, reg2, .Word)
     if (addr & 1) == 1 {
-        cpu_exception(.Address, addr, opcode)
+        cpu_exception_addr(.Address, addr, opcode)
         return
     }
     ea_data := cpu_get_ea_data16(mode, reg2, addr)
     sr.c = false
     if ea_data == 0 {
-        cpu_exception(.Zero, addr, opcode)
+        cpu_exception(.Zero, opcode)
         return
     }
 
@@ -2072,7 +2092,7 @@ cpu_or :: proc(opcode: u16)
         case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -2090,7 +2110,7 @@ cpu_or :: proc(opcode: u16)
         case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data32(mode, reg2, addr)
@@ -2141,7 +2161,7 @@ cpu_sub :: proc(opcode: u16)
         case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -2163,7 +2183,7 @@ cpu_sub :: proc(opcode: u16)
         case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data32(mode, reg2, addr)
@@ -2199,7 +2219,7 @@ cpu_suba :: proc(opcode: u16)
         case 3:
             addr := cpu_get_address(mode, reg2, .Word)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -2211,7 +2231,7 @@ cpu_suba :: proc(opcode: u16)
         case 7:
             addr := cpu_get_address(mode, reg2, .Long)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data32(mode, reg2, addr)
@@ -2246,14 +2266,14 @@ cpu_cmpm :: proc(opcode: u16)
         case .Word:
             addry := cpu_get_address(3, regy, size)
             if (addry & 1) == 1 {
-                cpu_exception(.Address, addry, opcode)
+                cpu_exception_addr(.Address, addry, opcode)
                 return
             }
             ea_datay := bus_read16(addry)
             addrx := cpu_get_address(3, regx, size)
             if (addrx & 1) == 1 {
                 cycles += 4
-                cpu_exception(.Address, addrx, opcode)
+                cpu_exception_addr(.Address, addrx, opcode)
                 return
             }
             ea_datax := bus_read16(addrx)
@@ -2264,14 +2284,14 @@ cpu_cmpm :: proc(opcode: u16)
         case .Long:
             addry := cpu_get_address(3, regy, size)
             if (addry & 1) == 1 {
-                cpu_exception(.Address, addry, opcode)
+                cpu_exception_addr(.Address, addry, opcode)
                 return
             }
             ea_datay := bus_read32(addry)
             addrx := cpu_get_address(3, regx, size)
             if (addrx & 1) == 1 {
                 cycles += 8
-                cpu_exception(.Address, addrx, opcode)
+                cpu_exception_addr(.Address, addrx, opcode)
                 return
             }
             ea_datax := bus_read32(addrx)
@@ -2303,7 +2323,7 @@ cpu_cmp :: proc(opcode: u16)
         case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -2315,7 +2335,7 @@ cpu_cmp :: proc(opcode: u16)
         case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data32(mode, reg2, addr)
@@ -2339,7 +2359,7 @@ cpu_cmpa :: proc(opcode: u16)
         case 3:
             addr := cpu_get_address(mode, reg2, .Word)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := i32(i16(cpu_get_ea_data16(mode, reg2, addr)))
@@ -2352,7 +2372,7 @@ cpu_cmpa :: proc(opcode: u16)
         case 7:
             addr := cpu_get_address(mode, reg2, .Long)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data32(mode, reg2, addr)
@@ -2392,7 +2412,7 @@ cpu_eor :: proc(opcode: u16)
         case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -2411,7 +2431,7 @@ cpu_eor :: proc(opcode: u16)
         case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data32(mode, reg2, addr)
@@ -2438,7 +2458,7 @@ cpu_mulu :: proc(opcode: u16)
 
     addr := cpu_get_address(mode, reg2, .Word)
     if (addr & 1) == 1 {
-        cpu_exception(.Address, addr, opcode)
+        cpu_exception_addr(.Address, addr, opcode)
         return
     }
     ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -2462,7 +2482,7 @@ cpu_muls :: proc(opcode: u16)
 
     addr := cpu_get_address(mode, reg2, .Word)
     if (addr & 1) == 1 {
-        cpu_exception(.Address, addr, opcode)
+        cpu_exception_addr(.Address, addr, opcode)
         return
     }
     ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -2537,7 +2557,7 @@ cpu_and :: proc(opcode: u16)
         case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -2559,7 +2579,7 @@ cpu_and :: proc(opcode: u16)
         case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data32(mode, reg2, addr)
@@ -2612,7 +2632,7 @@ cpu_add :: proc(opcode: u16)
         case .Word:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -2631,7 +2651,7 @@ cpu_add :: proc(opcode: u16)
         case .Long:
             addr := cpu_get_address(mode, reg2, size)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data32(mode, reg2, addr)
@@ -2665,7 +2685,7 @@ cpu_adda :: proc(opcode: u16)
         case 3:
             addr := cpu_get_address(mode, reg2, .Word)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data16(mode, reg2, addr)
@@ -2677,7 +2697,7 @@ cpu_adda :: proc(opcode: u16)
         case 7:
             addr := cpu_get_address(mode, reg2, .Long)
             if (addr & 1) == 1 {
-                cpu_exception(.Address, addr, opcode)
+                cpu_exception_addr(.Address, addr, opcode)
                 return
             }
             ea_data := cpu_get_ea_data32(mode, reg2, addr)
@@ -2704,7 +2724,7 @@ cpu_asd_mem :: proc(opcode: u16)
 
     addr := cpu_get_address(mode, reg, .Word)
     if (addr & 1) == 1 {
-        cpu_exception(.Address, addr, opcode)
+        cpu_exception_addr(.Address, addr, opcode)
         return
     }
     ea_data := cpu_get_ea_data16(mode, reg, addr)
@@ -2743,7 +2763,7 @@ cpu_lsd_mem :: proc(opcode: u16)
 
     addr := cpu_get_address(mode, reg, .Word)
     if (addr & 1) == 1 {
-        cpu_exception(.Address, addr, opcode)
+        cpu_exception_addr(.Address, addr, opcode)
         return
     }
     ea_data := cpu_get_ea_data16(mode, reg, addr)
@@ -2777,7 +2797,7 @@ cpu_roxd_mem :: proc(opcode: u16)
 
     addr := cpu_get_address(mode, reg, .Word)
     if (addr & 1) == 1 {
-        cpu_exception(.Address, addr, opcode)
+        cpu_exception_addr(.Address, addr, opcode)
         return
     }
     ea_data := cpu_get_ea_data16(mode, reg, addr)
@@ -2811,7 +2831,7 @@ cpu_rod_mem :: proc(opcode: u16)
 
     addr := cpu_get_address(mode, reg, .Word)
     if (addr & 1) == 1 {
-        cpu_exception(.Address, addr, opcode)
+        cpu_exception_addr(.Address, addr, opcode)
         return
     }
     ea_data := cpu_get_ea_data16(mode, reg, addr)
