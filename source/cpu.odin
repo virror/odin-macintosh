@@ -441,8 +441,8 @@ cpu_decode :: proc(opcode: u16) -> u32
         case 0x0:
             cpu_decode_0(opcode)
         case 0x1..=0x3:
-            if (opcode >> 6)& 3 == 1 {  //MOVEA
-                //cpu_movea(opcode)
+            if (opcode >> 6) & 7 == 1 {  //MOVEA
+                cpu_movea(opcode)
             } else {                    //MOVE
                 //cpu_move(opcode)
             }
@@ -453,7 +453,7 @@ cpu_decode :: proc(opcode: u16) -> u32
         case 0x6:
             cpu_decode_6(opcode)
         case 0x7:                       //MOVEQ
-            //cpu_moveq(opcode)
+            cpu_moveq(opcode)
         case 0x8:
             cpu_decode_8(opcode)
         case 0x9:
@@ -994,6 +994,36 @@ cpu_cmpi :: proc(opcode: u16)
                 flags32(data, ovf, carry, false)
             }
     }
+}
+
+@(private="file")
+cpu_movea :: proc(opcode: u16)
+{
+    size := (opcode >> 12) & 3
+    reg := (opcode >> 9) & 7
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+    ea_data: u32
+
+    switch size {
+        case 3: //Word
+            addr := cpu_get_address(mode, reg2, .Word)
+            if (addr & 1) == 1 {
+                cpu_exception_addr(.Address, addr, opcode)
+                return
+            }
+            ea_data = u32(i32(i16(cpu_get_ea_data16(mode, reg2, addr))))
+        case 2: //Long
+            addr := cpu_get_address(mode, reg2, .Long)
+            if (addr & 1) == 1 {
+                cpu_exception_addr(.Address, addr, opcode)
+                return
+            }
+            ea_data = cpu_get_ea_data32(mode, reg2, addr)
+    }
+    cpu_Areg_set(reg, ea_data)
+    cycles += 4
+    cpu_prefetch()
 }
 
 @(private="file")
@@ -1815,6 +1845,21 @@ cpu_subq :: proc(opcode: u16)
                 flags32(data2, ovf, carry)
             }
     }
+}
+
+@(private="file")
+cpu_moveq :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    imm := u32(i32(i8(opcode)))
+
+    D[reg] = imm
+    sr.n = bool((imm >> 31) & 1)
+    sr.z = bool(imm == 0)
+    sr.v = false
+    sr.c = false
+    cycles += 4
+    cpu_prefetch()
 }
 
 @(private="file")
