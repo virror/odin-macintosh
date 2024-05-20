@@ -36,6 +36,14 @@ Operation :: enum {
     Or,
 }
 
+@(private="file")
+BitOp :: enum {
+    Test,
+    Set,
+    Clear,
+    Change,
+}
+
 SR :: bit_field u16 {
     c: bool         | 1,
     v: bool         | 1,
@@ -572,13 +580,13 @@ cpu_decode_0 :: proc(opcode: u16)
             sub_code := (opcode >> 6) & 3
             switch sub_code {
                 case 0x0:       //BTST
-                    //cpu_btst(opcode)
+                    cpu_bit(opcode, true, .Test)
                 case 0x1:       //BCHG
-                    //cpu_bchg(opcode)
+                    //cpu_bit(opcode, true, .Change)
                 case 0x2:       //BCLR
-                    //cpu_bclr(opcode)
+                    //cpu_bit(opcode, true, .Clear)
                 case 0x3:       //BSET
-                    //cpu_bset(opcode)
+                    //cpu_bit(opcode, true, .Set)
             }
         case 0xA:
             sub_code := opcode & 0xFF
@@ -596,13 +604,13 @@ cpu_decode_0 :: proc(opcode: u16)
             sub_code := (opcode >> 6) & 3
             switch sub_code {
                 case 0x0:       //BTST
-                    //cpu_btst(opcode)
+                    cpu_bit(opcode, false, .Test)
                 case 0x1:       //BCHG
-                    //cpu_bchg(opcode)
+                    //cpu_bit(opcode, false, .Change)
                 case 0x2:       //BCLR
-                    //cpu_bclr(opcode)
+                    //cpu_bit(opcode, false, .Clear)
                 case 0x3:       //BSET
-                    //cpu_bset(opcode)
+                    //cpu_bit(opcode, false, .Set)
             }
     }
 }
@@ -1207,6 +1215,67 @@ cpu_alui :: proc(opcode: u16, op: Operation) -> bool
                 cpu_write32(addr, u32(data)) or_return
             }
     }
+    return true
+}
+
+@(private="file")
+cpu_bit :: proc(opcode: u16, mem: bool, bitop: BitOp) -> bool
+{
+    reg2 := (opcode >> 9) & 7
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+    shift: u32
+
+    if mem {
+        shift = u32(u8(cpu_fetch()))
+    } else {
+        shift = D[reg2]
+    }
+
+    if mode == 0 {
+        shift = shift % 32
+        addr := cpu_get_address(mode, reg, .Long)
+        ea_data := cpu_get_ea_data32(mode, reg, addr) or_return
+        sr.z = !(bool((ea_data >> shift) & 1))
+        switch bitop {
+            case .Set:
+                ea_data |= (1 << shift)
+                D[reg] = ea_data
+                cycles += 4
+            case .Clear:
+                ea_data |= (1 << shift)
+                D[reg] = ea_data
+                cycles += 4
+            case .Change:
+                ea_data ~= (1 << shift)
+                D[reg] = ea_data
+                cycles += 4
+            case .Test:
+                cycles += 2
+        }
+    } else {
+        shift = u32(u8(shift) % 8)
+        addr := cpu_get_address(mode, reg, .Byte)
+        ea_data := cpu_get_ea_data8(mode, reg, addr)
+        sr.z = !(bool((ea_data >> shift) & 1))
+        if mode == 7 && reg == 4 && mem == false { //TODO: Correct?
+            cycles += 2
+        }
+        switch bitop {
+            case .Set:
+                ea_data |= (1 << shift)
+                cpu_write8(addr, ea_data)
+            case .Clear:
+                ea_data |= (1 << shift)
+                cpu_write8(addr, ea_data)
+            case .Change:
+                ea_data ~= (1 << shift)
+                cpu_write8(addr, ea_data)
+            case .Test:
+                //Do nothing
+        }
+    }
+    cpu_prefetch()
     return true
 }
 
