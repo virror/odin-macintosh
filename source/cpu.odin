@@ -44,6 +44,26 @@ BitOp :: enum {
     Change,
 }
 
+@(private="file")
+Conditional :: enum {
+    T,
+    F,
+    HI,
+    LS,
+    CC,
+    CS,
+    NE,
+    EQ,
+    VC,
+    VS,
+    PL,
+    MI,
+    GE,
+    LT,
+    GT,
+    LE,
+}
+
 SR :: bit_field u16 {
     c: bool         | 1,
     v: bool         | 1,
@@ -393,6 +413,60 @@ cpu_write32 :: proc(addr: u32, value: u32) -> bool
 }
 
 @(private="file")
+cpu_pc_add :: proc(imm: i32) -> bool
+{
+    new_pc := u32(i32(pc) + imm)
+    pc = new_pc
+    if (pc & 1) == 1 {
+        pc -= 4
+        cycles -= 2
+        cpu_exception_addr(.Address, new_pc, true, true)
+        return false
+    }
+    return true
+}
+
+@(private="file")
+cpu_cond_get :: proc(cond: Conditional) -> bool
+{
+    switch cond {
+        case .T:
+            return true
+        case .F:
+            return false
+        case .HI:
+            return !sr.c & !sr.z
+        case .LS:
+            return sr.c | sr.z
+        case .CC:
+            return !sr.c
+        case .CS:
+            return sr.c
+        case .NE:
+            return !sr.z
+        case .EQ:
+            return sr.z
+        case .VC:
+            return !sr.v
+        case .VS:
+            return sr.v
+        case .PL:
+            return !sr.n
+        case .MI:
+            return sr.n
+        case .GE:
+            return sr.n & sr.v | !sr.n & !sr.v
+        case .LT:
+            return sr.n & !sr.v | !sr.n & sr.v
+        case .GT:
+            return sr.n & sr.v & !sr.z | !sr.n & !sr.v & !sr.z
+        case .LE:
+            return sr.z | sr.n & !sr.v | !sr.n & sr.v
+    }
+    return false
+}
+
+@(private="file")
 cpu_get_exc_group :: proc(exc: Exception) -> u8
 {
     switch exc {
@@ -470,11 +544,10 @@ cpu_exception :: proc(exc: Exception)
 
 // TODO: Still needs loads of work
 @(private="file")
-cpu_exception_addr :: proc(exc: Exception, addr: u32, rw: bool)
+cpu_exception_addr :: proc(exc: Exception, addr: u32, rw: bool, i_n: bool = false)
 {
     exc_vec: u32
-    function_code :u16= 5
-    i_n := false
+    function_code :u16= 5 + u16(i_n)
     tmp_sr := u16(sr)
     sr.super = true
     sr.trace = 0
@@ -712,7 +785,12 @@ cpu_decode_4 :: proc(opcode: u16)
 @(private="file")
 cpu_decode_5 :: proc(opcode: u16)
 {
-    if (opcode >> 6) & 3 == 3 { //Scc/DBcc
+    if (opcode >> 6) & 3 == 3 {
+        if (opcode >> 3) & 7 == 1 { //DBcc
+            cpu_dbcc(opcode)
+        } else {                //Scc
+            cpu_scc(opcode)
+        }
 
     } else {
         if (opcode >> 8) & 1 == 0 {
@@ -729,11 +807,11 @@ cpu_decode_6 :: proc(opcode: u16)
     second := (opcode >> 8) & 0xF
     switch second {
         case 0x0:
-            //cpu_bra(opcode)
+            cpu_bcc(opcode)
         case 0x1:
             //cpu_bsr(opcode)
         case:
-            //cpu_bcc(opcode)
+            cpu_bcc(opcode)
     }
 }
 
@@ -1853,6 +1931,81 @@ cpu_subq :: proc(opcode: u16) -> bool
                 flags32(data2, ovf, carry)
             }
     }
+    return true
+}
+
+@(private="file")
+cpu_dbcc :: proc(opcode: u16) -> bool
+{
+    cond := Conditional((opcode >> 8) & 15)
+    reg := (opcode >> 0) & 7
+    imm := i32(i16(cpu_fetch()))
+    test := cpu_cond_get(cond)
+
+    if test == false {
+        D[reg] -= 1
+        if i32(D[reg]) != -1 {
+            cpu_pc_add(imm) or_return
+            cycles += 6
+            cpu_refetch()
+            return true
+        } else {
+            cycles += 2
+        }
+    } else {
+        cycles += 4
+
+    }
+    cpu_prefetch()
+    return true
+}
+
+@(private="file")
+cpu_scc :: proc(opcode: u16)
+{
+    cond := Conditional((opcode >> 8) & 15)
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg, .Byte)
+    cpu_get_ea_data8(mode, reg, addr)
+    test := cpu_cond_get(cond)
+
+    if mode == 0 {
+        D[reg] &= 0xFFFFFF00
+        D[reg] |= u32(u8(test) * 0xFF)
+        if test {
+            cycles += 2
+        }
+    } else {
+        cpu_write8(addr, u8(test) * 0xFF)
+    }
+    cpu_prefetch()
+}
+
+@(private="file")
+cpu_bcc :: proc(opcode: u16) -> bool
+{
+    cond := Conditional((opcode >> 8) & 15)
+    imm := i16(i8(opcode))
+    test := cpu_cond_get(cond)
+
+    if test == true {
+        imm16 := i16(cpu_fetch())
+        if imm == 0 {
+            imm = imm16
+        }
+        cpu_pc_add(i32(imm)) or_return
+        cycles += 6
+        cpu_refetch()
+        return true
+    } else {
+        if imm == 0 {
+            cpu_fetch() //Skip unused imm value
+        }
+    }
+    cycles += 4
+    cpu_prefetch()
     return true
 }
 
