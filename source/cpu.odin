@@ -280,19 +280,19 @@ cpu_get_cycles_jmp_jsr :: proc(mode: u16, reg: u16)
 {
     switch mode {
         case 2:
-            cycles += 16
+            cycles += 8 //(an)
         case 5:
-            cycles += 18
+            cycles += 10//d 16,An
         case 6:
-            cycles += 22
+            cycles += 14//(d8,An,Xn)
         case 7:
             switch reg {
                 case 0, 2:
-                    cycles += 18
+                    cycles += 10//(xxx).W  //(d16,PC)
                 case 1:
-                    cycles += 20
+                    cycles += 12//(xxx).L
                 case 3:
-                    cycles += 22
+                    cycles += 14//(d8,PC,Xn)
             }
     }
 }
@@ -413,6 +413,18 @@ cpu_write32 :: proc(addr: u32, value: u32) -> bool
 }
 
 @(private="file")
+cpu_push32 :: proc(value: u32)
+{
+    if sr.super {
+        ssp -= 4
+        cpu_write32(ssp, value)
+    } else {
+        usp -= 4
+        cpu_write32(usp, value)
+    }
+}
+
+@(private="file")
 cpu_pc_add :: proc(imm: i32) -> bool
 {
     new_pc := u32(i32(pc) + imm)
@@ -420,6 +432,20 @@ cpu_pc_add :: proc(imm: i32) -> bool
     if (pc & 1) == 1 {
         pc -= 4
         cycles -= 2
+        cpu_exception_addr(.Address, new_pc, true, true)
+        return false
+    }
+    return true
+}
+
+@(private="file")
+cpu_pc_set :: proc(imm: u32) -> bool
+{
+    new_pc := imm
+    pc = new_pc
+    if (pc & 1) == 1 {
+        pc -= 4
+        //cycles -= 2
         cpu_exception_addr(.Address, new_pc, true, true)
         return false
     }
@@ -757,19 +783,20 @@ cpu_decode_4 :: proc(opcode: u16)
                         case 0x2:       //STOP
                             cpu_stop(opcode)
                         case 0x3:       //RTE
-
+                            //cpu_rte(opcode)
                         case 0x5:       //RTS
-
+                            cpu_rts(opcode)
                         case 0x6:       //TRAPV
                             cpu_trapv(opcode)
                         case 0x7:       //RTR
+                            cpu_rtr(opcode)
                     }
                 case:
                     switch (opcode >> 6) & 7 {
                         case 2:         //JSR
                             //cpu_jsr(opcode)
                         case 3:         //JMP
-                            //cpu_jmp(opcode)
+                            cpu_jmp(opcode)
                     }
             }
         case:
@@ -809,7 +836,7 @@ cpu_decode_6 :: proc(opcode: u16)
         case 0x0:
             cpu_bcc(opcode)
         case 0x1:
-            //cpu_bsr(opcode)
+            cpu_bsr(opcode)
         case:
             cpu_bcc(opcode)
     }
@@ -1605,9 +1632,8 @@ cpu_pea :: proc(opcode: u16)
     reg := (opcode >> 0) & 7
 
     addr := cpu_get_address(mode, reg, .Long)
-    ssp -= 4
     cycles = 0
-    cpu_write32(ssp, addr)
+    cpu_push32(addr)
     cpu_get_cycles_lea_pea(mode, reg)
     cpu_prefetch()
 }
@@ -1747,6 +1773,18 @@ cpu_stop :: proc(opcode: u16)
 }
 
 @(private="file")
+cpu_rts :: proc(opcode: u16) -> bool
+{
+    tmp_pc := bus_read32(ssp)
+    ssp += 4
+    cycles += 8
+    cpu_pc_set(tmp_pc) or_return
+    cycles += 8
+    cpu_refetch()
+    return true
+}
+
+@(private="file")
 cpu_trapv :: proc(opcode: u16)
 {
     if sr.v {
@@ -1755,6 +1793,41 @@ cpu_trapv :: proc(opcode: u16)
         return
     }
     cpu_prefetch()
+}
+
+@(private="file")
+cpu_rtr :: proc(opcode: u16) -> bool
+{
+    sr &= SR(0xFF00)
+    sr |= SR(bus_read16(ssp) & 0x1F)
+    ssp += 2
+    tmp_pc := bus_read32(ssp)
+    ssp += 4
+    cycles += 12
+    cpu_pc_set(tmp_pc) or_return
+    cycles += 8
+    cpu_refetch()
+    return true
+}
+
+@(private="file")
+cpu_jmp :: proc(opcode: u16) -> bool
+{
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg, .Long)
+    if (mode == 7 && reg == 0) || (mode == 7 && reg == 2) || mode == 5 {
+        cycles -= 2
+    }
+    if (mode == 7 && reg == 1) {
+        cycles -= 4
+    }
+    cpu_pc_set(addr) or_return
+    cycles = 0
+    cpu_get_cycles_jmp_jsr(mode, reg)
+    cpu_refetch()
+    return true
 }
 
 @(private="file")
@@ -1981,6 +2054,24 @@ cpu_scc :: proc(opcode: u16)
         cpu_write8(addr, u8(test) * 0xFF)
     }
     cpu_prefetch()
+}
+
+@(private="file")
+cpu_bsr :: proc(opcode: u16) -> bool
+{
+    imm := i16(i8(opcode))
+    imm16 := i16(cpu_fetch())
+    if imm == 0 {
+        imm = imm16
+        cpu_push32(pc + 2)
+    } else {
+        cpu_push32(pc)
+    }
+
+    cpu_pc_add(i32(imm)) or_return
+    cycles += 6
+    cpu_refetch()
+    return true
 }
 
 @(private="file")
