@@ -6,10 +6,11 @@ import "base:intrinsics"
 
 /*TODO:
 -Finish instructions and pass tests
---CHK (4948)
+--CHK (1265)
 -Check use of SSR
 --Push/pop?
 -Dont allow illigal addressing modes
+-Interrupts
 */
 @(private="file")
 Exception :: enum {
@@ -537,7 +538,7 @@ cpu_exception :: proc(exc: Exception)
     ssp -= 4
     bus_write32(ssp, pc)
     ssp -= 2
-    bus_write16(ssp, tmp_sr+8)
+    bus_write16(ssp, tmp_sr)
     #partial switch exc {
         case .Illegal:
             exc_vec = 16
