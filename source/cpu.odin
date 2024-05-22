@@ -4,6 +4,13 @@ import "core:fmt"
 import "core:math"
 import "base:intrinsics"
 
+/*TODO:
+-Finish instructions and pass tests
+--CHK (4948)
+-Check use of SSR
+--Push/pop?
+-Dont allow illigal addressing modes
+*/
 @(private="file")
 Exception :: enum {
     Reset,
@@ -530,7 +537,7 @@ cpu_exception :: proc(exc: Exception)
     ssp -= 4
     bus_write32(ssp, pc)
     ssp -= 2
-    bus_write16(ssp, tmp_sr)
+    bus_write16(ssp, tmp_sr+8)
     #partial switch exc {
         case .Illegal:
             exc_vec = 16
@@ -746,8 +753,10 @@ cpu_decode_4 :: proc(opcode: u16)
                 cpu_swap(opcode)
             } else if (opcode >> 6) & 3 == 1 {      //PEA
                 cpu_pea(opcode)
-            } else {                                //NPCD
+            } else if (opcode >> 6) & 3 == 0 {      //NPCD
 
+            } else if (opcode >> 7) & 1 == 1 {      //MOVEM
+                //cpu_movem(opcode)
             }
         case 0xA:
             if (opcode >> 6) & 3 == 3 {
@@ -760,7 +769,9 @@ cpu_decode_4 :: proc(opcode: u16)
                 cpu_tst(opcode)
             }
         case 0xC:                       //MOVEM
-
+            if (opcode >> 7) & 1 == 1 {
+                //cpu_movem(opcode)
+            }
         case 0xE:
             sub_code := (opcode >> 4) & 0xF
             switch sub_code {
@@ -802,7 +813,7 @@ cpu_decode_4 :: proc(opcode: u16)
         case:
             switch (opcode >> 6) & 7 {
                 case 6:         //CHK
-
+                    cpu_chk(opcode)
                 case 7:         //LEA
                     cpu_lea(opcode)
             }
@@ -1842,6 +1853,37 @@ cpu_lea :: proc(opcode: u16)
     cycles = 0
     cpu_get_cycles_lea_pea(mode, reg)
     cpu_prefetch()
+}
+
+@(private="file")
+cpu_chk :: proc(opcode: u16) -> bool
+{
+    reg := (opcode >> 9) & 7
+    mode := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg2, .Word)
+    ea_data := i16(cpu_get_ea_data16(mode, reg2, addr) or_return)
+    data := i16(D[reg])
+    sr.z = false
+    sr.v = false
+    sr.c = false
+
+    if data < 0 || data > ea_data {
+        if data < 0 {
+            sr.n = true
+        }
+        if data > ea_data {
+            sr.n = false
+            cycles -= 2
+        }
+        pc += 2
+        cpu_exception(.CHK)
+        return false
+    }
+    cycles += 2
+    cpu_prefetch()
+    return true
 }
 
 @(private="file")
