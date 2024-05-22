@@ -9,6 +9,9 @@ import "base:intrinsics"
 --CHK (1265)
 --MOVE.w (4531)
 --MOVE.l (4478)
+--BSET (661)
+--BCHG (643)
+--BCLR (653)
 -Check use of SSR
 --Push/pop?
 -Dont allow illigal addressing modes
@@ -691,11 +694,11 @@ cpu_decode_0 :: proc(opcode: u16)
                 case 0x0:       //BTST
                     cpu_bit(opcode, true, .Test)
                 case 0x1:       //BCHG
-                    //cpu_bit(opcode, true, .Change)
+                    cpu_bit(opcode, true, .Change)
                 case 0x2:       //BCLR
-                    //cpu_bit(opcode, true, .Clear)
+                    cpu_bit(opcode, true, .Clear)
                 case 0x3:       //BSET
-                    //cpu_bit(opcode, true, .Set)
+                    cpu_bit(opcode, true, .Set)
             }
         case 0xA:
             sub_code := opcode & 0xFF
@@ -715,11 +718,11 @@ cpu_decode_0 :: proc(opcode: u16)
                 case 0x0:       //BTST
                     cpu_bit(opcode, false, .Test)
                 case 0x1:       //BCHG
-                    //cpu_bit(opcode, false, .Change)
+                    cpu_bit(opcode, false, .Change)
                 case 0x2:       //BCLR
-                    //cpu_bit(opcode, false, .Clear)
+                    cpu_bit(opcode, false, .Clear)
                 case 0x3:       //BSET
-                    //cpu_bit(opcode, false, .Set)
+                    cpu_bit(opcode, false, .Set)
             }
     }
 }
@@ -1424,7 +1427,7 @@ cpu_bit :: proc(opcode: u16, mem: bool, bitop: BitOp) -> bool
                 D[reg] = ea_data
                 cycles += 4
             case .Clear:
-                ea_data |= (1 << shift)
+                ea_data &= (0xFFFFFFFF ~ (1 << shift))
                 D[reg] = ea_data
                 cycles += 4
             case .Change:
@@ -1447,7 +1450,7 @@ cpu_bit :: proc(opcode: u16, mem: bool, bitop: BitOp) -> bool
                 ea_data |= (1 << shift)
                 cpu_write8(addr, ea_data)
             case .Clear:
-                ea_data |= (1 << shift)
+                ea_data &= (0xFF ~ (1 << shift))
                 cpu_write8(addr, ea_data)
             case .Change:
                 ea_data ~= (1 << shift)
