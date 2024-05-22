@@ -7,6 +7,8 @@ import "base:intrinsics"
 /*TODO:
 -Finish instructions and pass tests
 --CHK (1265)
+--MOVE.w (4531)
+--MOVE.l (4478)
 -Check use of SSR
 --Push/pop?
 -Dont allow illigal addressing modes
@@ -625,7 +627,7 @@ cpu_decode :: proc(opcode: u16) -> u32
             if (opcode >> 6) & 7 == 1 {  //MOVEA
                 cpu_movea(opcode)
             } else {                    //MOVE
-                //cpu_move(opcode)
+                cpu_move(opcode)
             }
         case 0x4:
             cpu_decode_4(opcode)
@@ -1182,6 +1184,68 @@ cpu_movea :: proc(opcode: u16) -> bool
             ea_data = cpu_get_ea_data32(mode, reg2, addr) or_return
     }
     cpu_Areg_set(reg, ea_data)
+    cpu_prefetch()
+    return true
+}
+
+@(private="file")
+cpu_move :: proc(opcode: u16) -> bool
+{
+    size := (opcode >> 12) & 3
+    reg := (opcode >> 9) & 7
+    mode := (opcode >> 6) & 7
+    mode2 := (opcode >> 3) & 7
+    reg2 := (opcode >> 0) & 7
+
+    switch size {
+        case 1:
+            addr2 := cpu_get_address(mode2, reg2, .Byte)
+            ea_data := cpu_get_ea_data8(mode2, reg2, addr2)
+            addr := cpu_get_address(mode, reg, .Byte)
+            cpu_get_ea_data8(mode, reg, addr)
+            if mode == 0 {
+                D[reg] &= 0xFFFFFF00
+                D[reg] |= u32(ea_data)
+            } else {
+                bus_write8(addr, ea_data)
+            }
+            sr.v = false
+            sr.c = false
+            sr.n = bool((ea_data >> 7) & 1)
+            sr.z = bool(ea_data == 0)
+        case 3:
+            addr2 := cpu_get_address(mode2, reg2, .Word)
+            ea_data := cpu_get_ea_data16(mode2, reg2, addr2) or_return
+            addr := cpu_get_address(mode, reg, .Word)
+            cpu_get_ea_data16(mode, reg, addr) or_return
+            sr.v = false
+            sr.c = false
+            sr.n = bool((ea_data >> 15) & 1)
+            sr.z = bool(ea_data == 0)
+            if mode == 0 {
+                D[reg] &= 0xFFFF0000
+                D[reg] |= u32(ea_data)
+            } else {
+                cpu_write16(addr, ea_data)
+            }
+        case 2:
+            addr2 := cpu_get_address(mode2, reg2, .Long)
+            ea_data := cpu_get_ea_data32(mode2, reg2, addr2) or_return
+            addr := cpu_get_address(mode, reg, .Long)
+            cpu_get_ea_data32(mode, reg, addr) or_return
+            sr.v = false
+            sr.c = false
+            sr.n = bool((ea_data >> 31) & 1)
+            sr.z = bool(ea_data == 0)
+            if mode == 0 {
+                D[reg] = u32(ea_data)
+            } else {
+                cpu_write32(addr, ea_data)
+            }
+    }
+    if mode == 4 {
+        cycles -= 2
+    }
     cpu_prefetch()
     return true
 }
