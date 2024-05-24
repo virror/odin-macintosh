@@ -663,57 +663,62 @@ cpu_decode :: proc(opcode: u16) -> u32
 @(private="file")
 cpu_decode_0 :: proc(opcode: u16)
 {
-    second := (opcode >> 8) & 0xF
-    switch second {
-        case 0x0:
-            sub_code := opcode & 0xFF
-            switch sub_code {
-                case 0x3C:      //ORI CCR
-                    cpu_ori_ccr(opcode)
-                case 0x7C:      //ORI SR
-                    cpu_ori_sr(opcode)
-                case:           //ORI
-                    cpu_alui(opcode, .Or)
-            }
-        case 0x2:
-            sub_code := opcode & 0xFF
-            switch sub_code {
-                case 0x3C:      //ANDI CCR
-                    cpu_andi_ccr(opcode)
-                case 0x7C:      //ANDI SR
-                    cpu_andi_sr(opcode)
-                case:           //ANDI
-                    cpu_alui(opcode, .And)
-            }
-        case 0x4:               //SUBI
-            cpu_alui(opcode, .Sub)
-        case 0x6:               //ADDI
-            cpu_alui(opcode, .Add)
-        case 0x8:
-            sub_code := (opcode >> 6) & 3
-            switch sub_code {
-                case 0x0:       //BTST
-                    cpu_bit(opcode, true, .Test)
-                case 0x1:       //BCHG
-                    cpu_bit(opcode, true, .Change)
-                case 0x2:       //BCLR
-                    cpu_bit(opcode, true, .Clear)
-                case 0x3:       //BSET
-                    cpu_bit(opcode, true, .Set)
-            }
-        case 0xA:
-            sub_code := opcode & 0xFF
-            switch sub_code {
-                case 0x3C:      //EORI CCR
-                    cpu_eori_ccr(opcode)
-                case 0x7C:      //EORI SR
-                    cpu_eori_sr(opcode)
-                case:           //EORI
-                    cpu_eori(opcode)
-            }
-        case 0xC:               //CMPI
-            cpu_cmpi(opcode)
-        case:
+    if (opcode & 0x100) == 0 {
+        second := (opcode >> 8) & 0xF
+        switch second {
+            case 0x0:
+                sub_code := opcode & 0xFF
+                switch sub_code {
+                    case 0x3C:      //ORI CCR
+                        cpu_ori_ccr(opcode)
+                    case 0x7C:      //ORI SR
+                        cpu_ori_sr(opcode)
+                    case:           //ORI
+                        cpu_alui(opcode, .Or)
+                }
+            case 0x2:
+                sub_code := opcode & 0xFF
+                switch sub_code {
+                    case 0x3C:      //ANDI CCR
+                        cpu_andi_ccr(opcode)
+                    case 0x7C:      //ANDI SR
+                        cpu_andi_sr(opcode)
+                    case:           //ANDI
+                        cpu_alui(opcode, .And)
+                }
+            case 0x4:               //SUBI
+                cpu_alui(opcode, .Sub)
+            case 0x6:               //ADDI
+                cpu_alui(opcode, .Add)
+            case 0x8:
+                sub_code := (opcode >> 6) & 3
+                switch sub_code {
+                    case 0x0:       //BTST
+                        cpu_bit(opcode, true, .Test)
+                    case 0x1:       //BCHG
+                        cpu_bit(opcode, true, .Change)
+                    case 0x2:       //BCLR
+                        cpu_bit(opcode, true, .Clear)
+                    case 0x3:       //BSET
+                        cpu_bit(opcode, true, .Set)
+                }
+            case 0xA:
+                sub_code := opcode & 0xFF
+                switch sub_code {
+                    case 0x3C:      //EORI CCR
+                        cpu_eori_ccr(opcode)
+                    case 0x7C:      //EORI SR
+                        cpu_eori_sr(opcode)
+                    case:           //EORI
+                        cpu_eori(opcode)
+                }
+            case 0xC:               //CMPI
+                cpu_cmpi(opcode)
+        }
+    } else {
+        if ((opcode >> 3) & 7) == 1 {
+            cpu_movep(opcode)
+        } else {
             sub_code := (opcode >> 6) & 3
             switch sub_code {
                 case 0x0:       //BTST
@@ -725,6 +730,7 @@ cpu_decode_0 :: proc(opcode: u16)
                 case 0x3:       //BSET
                     cpu_bit(opcode, false, .Set)
             }
+        }
     }
 }
 
@@ -927,7 +933,7 @@ cpu_decode_D :: proc(opcode: u16)
 {
     if (opcode >> 6) & 3 == 3 { //ADDA
         cpu_adda(opcode)
-    } else if (opcode & 0xF130) == 0x9100 {//ADDX
+    } else if (opcode & 0xF130) == 0xD100 {//ADDX
 
     } else {                    //ADD
         cpu_alu(opcode, .Add)
@@ -1460,6 +1466,45 @@ cpu_bit :: proc(opcode: u16, mem: bool, bitop: BitOp) -> bool
                 //Do nothing
         }
     }
+    cpu_prefetch()
+    return true
+}
+
+@(private="file")
+cpu_movep :: proc(opcode: u16) -> bool
+{
+    reg2 := (opcode >> 9) & 7
+    mode := (opcode >> 6) & 3
+    reg := (opcode >> 0) & 7
+
+    switch mode {
+        case 0:
+            addr := cpu_get_address(5, reg, .Word)
+            data1 := cpu_get_ea_data8(5, reg, addr)
+            data2 := cpu_get_ea_data8(5, reg, addr + 2)
+            D[reg2] &= 0xFFFF0000
+            D[reg2] |= u32(u16(data2) | (u16(data1) << 8))
+        case 1:
+            addr := cpu_get_address(5, reg, .Word)
+            data1 := cpu_get_ea_data8(5, reg, addr)
+            data2 := cpu_get_ea_data8(5, reg, addr + 2)
+            data3 := cpu_get_ea_data8(5, reg, addr + 4)
+            data4 := cpu_get_ea_data8(5, reg, addr + 6)
+            D[reg2] = u32(data4) | (u32(data3) << 8) | (u32(data2) << 16) | (u32(data1) << 24)
+        case 2:
+            data := u16(D[reg2])
+            addr := cpu_get_address(5, reg, .Word)
+            cpu_write8(addr, u8(data >> 8))
+            cpu_write8(addr + 2, u8(data))
+        case 3:
+            data := D[reg2]
+            addr := cpu_get_address(5, reg, .Word)
+            cpu_write8(addr, u8(data >> 24))
+            cpu_write8(addr + 2, u8(data >> 16))
+            cpu_write8(addr + 4, u8(data >> 8))
+            cpu_write8(addr + 6, u8(data))
+    }
+
     cpu_prefetch()
     return true
 }
