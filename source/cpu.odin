@@ -12,6 +12,7 @@ import "base:intrinsics"
 --BSET (661)
 --BCHG (643)
 --BCLR (653)
+--ABCD (2493)
 -Check use of SSR
 --Push/pop?
 -Dont allow illigal addressing modes
@@ -736,7 +737,7 @@ cpu_decode_4 :: proc(opcode: u16)
             if (opcode >> 6) & 3 == 3 { //MOVE from SR
                 cpu_move_from_sr(opcode)
             } else {                    //NEGX
-
+                fmt.println("NEGX not implemented!")
             }
         case 0x2:                       //CLR
             cpu_clr(opcode)
@@ -759,8 +760,8 @@ cpu_decode_4 :: proc(opcode: u16)
                 cpu_swap(opcode)
             } else if (opcode >> 6) & 3 == 1 {      //PEA
                 cpu_pea(opcode)
-            } else if (opcode >> 6) & 3 == 0 {      //NPCD
-
+            } else if (opcode >> 6) & 3 == 0 {      //NBCD
+                cpu_nbcd(opcode)
             } else if (opcode >> 7) & 1 == 1 {      //MOVEM
                 //cpu_movem(opcode)
             }
@@ -870,7 +871,7 @@ cpu_decode_8 :: proc(opcode: u16)
             cpu_divs(opcode)
         case:
             if (opcode >> 4) & 31 == 16 {//SBCD
-                fmt.println("BLA")
+                cpu_sbcd(opcode)
             } else {    //OR
                 cpu_alu(opcode, .Or)
             }
@@ -913,7 +914,7 @@ cpu_decode_C :: proc(opcode: u16)
         case 0x1C..=0x1F://MULS
             cpu_muls(opcode)
         case 0x10:      //ABCD
-
+            cpu_abcd(opcode)
         case 0x14, 0x18://EXG
             cpu_exg(opcode)
         case:           //AND
@@ -1692,6 +1693,37 @@ cpu_ext :: proc(opcode: u16)
 }
 
 @(private="file")
+cpu_nbcd :: proc(opcode: u16)
+{
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    addr := cpu_get_address(mode, reg, .Byte)
+    ea_data := cpu_get_ea_data8(mode, reg, addr)
+
+    dd := - ea_data - u8(sr.x)
+    bc := (ea_data | dd) & 0x88
+    corf := bc - (bc >> 2)
+    res := dd - corf
+
+    if mode == 0 {
+        cycles += 2
+        D[reg] &= 0xFFFFFF00
+        D[reg] |= u32(res)
+    } else {
+        cpu_write8(addr, res)
+    }
+    sr.c = bool((bc | (~dd & res)) >> 7)
+    sr.v = bool((dd & ~res) >> 7)
+    if res != 0 {
+        sr.z = false
+    }
+    sr.n = bool(res >> 7)
+    sr.x = sr.c
+    cpu_prefetch()
+}
+
+@(private="file")
 cpu_swap :: proc(opcode: u16)
 {
     reg := opcode & 7
@@ -2331,6 +2363,47 @@ cpu_divs :: proc(opcode: u16) -> bool
 }
 
 @(private="file")
+cpu_sbcd :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    rm := (opcode >> 3) & 1
+    reg2 := (opcode >> 0) & 7
+    data1: u8
+    data2: u8
+    addr: u32
+
+    if rm == 0 {
+        data1 = u8(D[reg])
+        data2 = u8(D[reg2])
+    } else {
+        addr2 := cpu_get_address(4, reg2, .Byte)
+        addr = cpu_get_address(4, reg, .Byte)
+        cycles = 0
+        data2 = cpu_get_ea_data8(4, reg2, addr2)
+        data1 = cpu_get_ea_data8(4, reg, addr)
+    }
+    dd := data1 - data2 - u8(sr.x)
+    bc := ((~data1 & data2) | (dd & ~data1) | (dd & data2)) & 0x88
+	corf := bc - (bc >> 2)
+	res := dd - corf
+    sr.c = bool((bc | (~dd & res)) >> 7)
+    sr.v = bool((dd & ~res) >> 7)
+	if res != 0 {
+        sr.z = false
+    }
+	sr.n = bool(res >> 7)
+    sr.x = sr.c
+    if rm == 0 {
+        D[reg] &= 0xFFFFFF00
+        D[reg] |= u32(res)
+    } else {
+        cpu_write8(addr, res)
+    }
+    cycles += 2
+    cpu_prefetch()
+}
+
+@(private="file")
 cpu_sub :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -2716,6 +2789,49 @@ cpu_muls :: proc(opcode: u16) -> bool
     sr.n = bool(data >> 31)
     cpu_prefetch()
     return true
+}
+
+@(private="file")
+cpu_abcd :: proc(opcode: u16)
+{
+    reg := (opcode >> 9) & 7
+    rm := (opcode >> 3) & 1
+    reg2 := (opcode >> 0) & 7
+    data1: u8
+    data2: u8
+    addr: u32
+
+    if rm == 0 {
+        data1 = u8(D[reg])
+        data2 = u8(D[reg2])
+    } else {
+        addr2 := cpu_get_address(4, reg2, .Byte)
+        addr = cpu_get_address(4, reg, .Byte)
+        cycles = 0
+        data2 = cpu_get_ea_data8(4, reg2, addr2)
+        data1 = cpu_get_ea_data8(4, reg, addr)
+    }
+    ss := data1 + data2 + u8(sr.x)
+    bc := ((data1 & data2) | (~ss & data1) | (~ss & data2)) & 0x88
+    dc := u8((u16((ss + 0x66) ~ ss) & 0x110) >> 1)
+	corf := (bc | dc) - ((bc | dc) >> 2)
+	res := ss + corf
+    sr.c = bool((bc | (ss & ~res)) >> 7)
+    sr.v = bool((~ss & res) >> 7)
+	if res != 0 {
+        sr.z = false
+    }
+	sr.n = bool(res >> 7)
+    sr.x = sr.c
+
+    if rm == 0 {
+        D[reg] &= 0xFFFFFF00
+        D[reg] |= u32(res)
+    } else {
+        cpu_write8(addr, res)
+    }
+    cycles += 2
+    cpu_prefetch()
 }
 
 @(private="file")
