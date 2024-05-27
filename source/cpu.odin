@@ -7,14 +7,14 @@ import "base:intrinsics"
 /*TODO:
 -Finish instructions and pass tests
 --CHK (1265)
---MOVE.w (4531)
---MOVE.l (4478)
+--MOVE.w, l (4531), (4478)
 --BSET (661)
 --BCHG (643)
 --BCLR (653)
 --ABCD (2493)
 -Check use of SSR
 --Push/pop?
+-Correct prefetch timing
 -Dont allow illigal addressing modes
 -Interrupts
 */
@@ -181,7 +181,7 @@ cpu_Areg_get :: proc(reg: u16) -> u32
 }
 
 @(private="file")
-cpu_get_address :: proc(mode: u16, reg: u16, size: Size) -> u32
+cpu_get_address :: proc(mode: u16, reg: u16, size: Size, apa: bool = false) -> u32
 {
     addr: u32
     switch mode {
@@ -215,7 +215,11 @@ cpu_get_address :: proc(mode: u16, reg: u16, size: Size) -> u32
                 case .Word:
                     addr -= 2
                 case .Long:
-                    addr -= 4
+                    if (addr & 1) == 1 && apa {
+                        addr -= 2
+                    } else {
+                        addr -= 4
+                    }
             }
             cpu_Areg_set(reg, addr)
             cycles += 2
@@ -743,7 +747,7 @@ cpu_decode_4 :: proc(opcode: u16)
             if (opcode >> 6) & 3 == 3 { //MOVE from SR
                 cpu_move_from_sr(opcode)
             } else {                    //NEGX
-                fmt.println("NEGX not implemented!")
+                cpu_negx(opcode)
             }
         case 0x2:                       //CLR
             cpu_clr(opcode)
@@ -890,7 +894,7 @@ cpu_decode_9 :: proc(opcode: u16)
     if (opcode >> 6) & 3 == 3 { //SUBA
         cpu_suba(opcode)
     } else if (opcode & 0xF130) == 0x9100 {//SUBX
-
+        cpu_alux(opcode, .Sub)
     } else {                    //SUB
         cpu_sub(opcode)
     }
@@ -934,7 +938,7 @@ cpu_decode_D :: proc(opcode: u16)
     if (opcode >> 6) & 3 == 3 { //ADDA
         cpu_adda(opcode)
     } else if (opcode & 0xF130) == 0xD100 {//ADDX
-
+        cpu_alux(opcode, .Add)
     } else {                    //ADD
         cpu_alu(opcode, .Add)
     }
@@ -1529,6 +1533,74 @@ cpu_move_from_sr :: proc(opcode: u16) -> bool
 }
 
 @(private="file")
+cpu_negx :: proc(opcode: u16) -> bool
+{
+    size := Size((opcode >> 6) & 3)
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+
+    switch size {
+        case .Byte:
+            addr := cpu_get_address(mode, reg, size)
+            ea_data := cpu_get_ea_data8(mode, reg, addr)
+
+            res := 0 - ea_data - u8(sr.x)
+            if mode == 0 {
+                D[reg] &= 0xFFFFFF00
+                D[reg] |= u32(res)
+            } else {
+                cpu_write8(addr, u8(res))
+            }
+            sr.c = bool((ea_data | res) >> 7)
+            sr.v = bool((ea_data & res) >> 7)
+            if res != 0 {
+                sr.z = false
+            }
+            sr.n = bool(res >> 7)
+            sr.x = sr.c
+        case .Word:
+            addr := cpu_get_address(mode, reg, size)
+            ea_data := cpu_get_ea_data16(mode, reg, addr) or_return
+
+            res := 0 - ea_data - u16(sr.x)
+            if mode == 0 {
+                D[reg] &= 0xFFFF0000
+                D[reg] |= u32(res)
+            } else {
+                cpu_write16(addr, u16(res))
+            }
+            sr.c = bool((ea_data | res) >> 15)
+            sr.v = bool((ea_data & res) >> 15)
+            if res != 0 {
+                sr.z = false
+            }
+            sr.n = bool(res >> 15)
+            sr.x = sr.c
+        case .Long:
+            addr := cpu_get_address(mode, reg, size)
+            ea_data := cpu_get_ea_data32(mode, reg, addr) or_return
+
+            res := 0 - ea_data - u32(sr.x)
+            if mode == 0 {
+                D[reg] = res
+                cycles += 2
+            } else {
+                cpu_write32(addr, res)
+            }
+            sr.c = bool((ea_data | res) >> 31)
+            sr.v = bool((ea_data & res) >> 31)
+            if res != 0 {
+                sr.z = false
+            }
+            sr.n = bool(res >> 31)
+            sr.x = sr.c
+    }
+
+    cpu_prefetch()
+    return true
+}
+
+@(private="file")
 cpu_move_ccr :: proc(opcode: u16) -> bool
 {
     mode := (opcode >> 3) & 7
@@ -1746,7 +1818,7 @@ cpu_nbcd :: proc(opcode: u16)
     addr := cpu_get_address(mode, reg, .Byte)
     ea_data := cpu_get_ea_data8(mode, reg, addr)
 
-    dd := - ea_data - u8(sr.x)
+    dd := 0 - ea_data - u8(sr.x)
     bc := (ea_data | dd) & 0x88
     corf := bc - (bc >> 2)
     res := dd - corf
@@ -2597,6 +2669,128 @@ cpu_alu :: proc(opcode: u16, op: Operation) -> bool
                 }
             }
     }
+    return true
+}
+
+@(private="file")
+cpu_alux :: proc(opcode: u16, op: Operation) -> bool
+{
+    reg := (opcode >> 9) & 7
+    size := Size((opcode >> 6) & 3)
+    rm := (opcode >> 3) & 1
+    reg2 := (opcode >> 0) & 7
+
+    switch size {
+        case .Byte:
+            res: u8
+            data1: u8
+            data2: u8
+            addr2: u32
+            if rm == 1 {
+                addr := cpu_get_address(4, reg2, size)
+                data1 = cpu_get_ea_data8(4, reg2, addr)
+                addr2 = cpu_get_address(4, reg, size)
+                data2 = cpu_get_ea_data8(4, reg, addr2)
+            } else {
+                data1 = u8(D[reg2])
+                data2 = u8(D[reg])
+            }
+            #partial switch op {
+                case .Sub:
+                    res = data2 - data1 - u8(sr.x)
+                    sr.c = bool(((~data2 & data1) | (res & ~data2) | (res & data1)) >> 7)
+                    sr.v = bool(((~data1 & data2 & ~res) | (data1 & ~data2 & res)) >> 7)
+                case .Add:
+                    res = data1 + data2 + u8(sr.x)
+                    sr.c = bool(((data1 & data2) | (~res & data1) | (~res & data2)) >> 7)
+                    sr.v = bool(((data1 & data2 & ~res) | (~data1 & ~data2 & res)) >> 7)
+            }
+            if rm == 1 {
+                cpu_write8(addr2, u8(res))
+                cycles -= 2
+            } else {
+                D[reg] &= 0xFFFFFF00
+                D[reg] |= u32(u8(res))
+            }
+            if res != 0 {
+                sr.z = false
+            }
+            sr.n = bool(res >> 7)
+            sr.x = sr.c
+        case .Word:
+            res: u16
+            data1: u16
+            data2: u16
+            addr2: u32
+            if rm == 1 {
+                addr := cpu_get_address(4, reg2, size)
+                data1 = cpu_get_ea_data16(4, reg2, addr) or_return
+                addr2 = cpu_get_address(4, reg, size)
+                cycles -= 2
+                data2 = cpu_get_ea_data16(4, reg, addr2) or_return
+            } else {
+                data1 = u16(D[reg2])
+                data2 = u16(D[reg])
+            }
+            #partial switch op {
+                case .Sub:
+                    res = data2 - data1 - u16(sr.x)
+                    sr.c = bool(((~data2 & data1) | (res & ~data2) | (res & data1)) >> 15)
+                    sr.v = bool(((~data1 & data2 & ~res) | (data1 & ~data2 & res)) >> 15)
+                case .Add:
+                    res = data1 + data2 + u16(sr.x)
+                    sr.c = bool(((data1 & data2) | (~res & data1) | (~res & data2)) >> 15)
+                    sr.v = bool(((data1 & data2 & ~res) | (~data1 & ~data2 & res)) >> 15)
+            }
+            if rm == 1 {
+                cpu_write16(addr2, u16(res))
+            } else {
+                D[reg] &= 0xFFFF0000
+                D[reg] |= u32(u16(res))
+            }
+            if res != 0 {
+                sr.z = false
+            }
+            sr.n = bool(res >> 15)
+            sr.x = sr.c
+        case .Long:
+            res: u32
+            data1: u32
+            data2: u32
+            addr2: u32
+            if rm == 1 {
+                addr := cpu_get_address(4, reg2, size, true)
+                data1 = cpu_get_ea_data32(4, reg2, addr) or_return
+                addr2 = cpu_get_address(4, reg, size, true)
+                cycles -= 2
+                data2 = cpu_get_ea_data32(4, reg, addr2) or_return
+            } else {
+                data1 = D[reg2]
+                data2 = D[reg]
+            }
+            #partial switch op {
+                case .Sub:
+                    res = data2 - data1 - u32(sr.x)
+                    sr.c = bool(((~data2 & data1) | (res & ~data2) | (res & data1)) >> 31)
+                    sr.v = bool(((~data1 & data2 & ~res) | (data1 & ~data2 & res)) >> 31)
+                case .Add:
+                    res = data1 + data2 + u32(sr.x)
+                    sr.c = bool(((data1 & data2) | (~res & data1) | (~res & data2)) >> 31)
+                    sr.v = bool(((data1 & data2 & ~res) | (~data1 & ~data2 & res)) >> 31)
+            }
+            if rm == 1 {
+                cpu_write32(addr2, res)
+            } else {
+                D[reg] = res
+                cycles += 4
+            }
+            if res != 0 {
+                sr.z = false
+            }
+            sr.n = bool(res >> 31)
+            sr.x = sr.c
+    }
+    cpu_prefetch()
     return true
 }
 
