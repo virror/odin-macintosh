@@ -13,7 +13,7 @@ import "base:intrinsics"
 --BCLR (653)
 --ABCD (2493)
 --MOVEM (787), (X)
--Check use of SSR
+-Check use of SSP
 --Push/pop?
 -Correct prefetch timing
 -Dont allow illigal addressing modes
