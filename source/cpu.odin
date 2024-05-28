@@ -463,7 +463,6 @@ cpu_pc_set :: proc(imm: u32) -> bool
     pc = new_pc
     if (pc & 1) == 1 {
         pc -= 4
-        //cycles -= 2
         cpu_exception_addr(.Address, new_pc, true, true)
         return false
     }
@@ -586,16 +585,15 @@ cpu_exception :: proc(exc: Exception)
     cpu_refetch()
 }
 
-// TODO: Still needs loads of work
 @(private="file")
 cpu_exception_addr :: proc(exc: Exception, addr: u32, rw: bool, i_n: bool = false)
 {
     exc_vec: u32
-    function_code :u16= 5 + u16(i_n)
+    function_code :u16= 1 + u16(i_n)   //TODO; Check this
+    function_code |= (u16(sr.super) << 2)
     tmp_sr := u16(sr)
     sr.super = true
     sr.trace = 0
-    sr.intr_mask = 7    //TODO; Check this
 
     ssp -= 4
     bus_write32(ssp, pc)
@@ -811,7 +809,7 @@ cpu_decode_4 :: proc(opcode: u16)
                         case 0x2:       //STOP
                             cpu_stop(opcode)
                         case 0x3:       //RTE
-                            //cpu_rte(opcode)
+                            cpu_rte(opcode)
                         case 0x5:       //RTS
                             cpu_rts(opcode)
                         case 0x6:       //TRAPV
@@ -1998,6 +1996,25 @@ cpu_stop :: proc(opcode: u16)
         return
     }
     cpu_prefetch()
+}
+
+@(private="file")
+cpu_rte :: proc(opcode: u16) -> bool
+{
+    if sr.super {
+        sr = SR(bus_read16(ssp) & 0xA71F)
+        ssp += 2
+        new_pc := bus_read32(ssp)
+        ssp += 4
+        cycles += 12
+        cpu_pc_set(new_pc) or_return
+    } else {
+        cpu_exception(.Privilege)
+        return false
+    }
+    cycles += 8
+    cpu_refetch()
+    return true
 }
 
 @(private="file")
