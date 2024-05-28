@@ -18,7 +18,6 @@ import "base:intrinsics"
 -Correct prefetch timing
 -Dont allow illigal addressing modes
 -Interrupts
--Move test RAM to testfile
 */
 @(private="file")
 Exception :: enum {
@@ -111,9 +110,7 @@ current_op: u16
 cpu_init :: proc()
 {
     fmt.println("Cpu init") //Get rid of unused fmt error
-    //pc = 0x400000
     cpu_exception_reset()
-    cpu_refetch()
 }
 
 @(private="file")

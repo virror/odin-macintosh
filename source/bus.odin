@@ -20,21 +20,24 @@ bus_init :: proc()
 bus_read32 :: proc(address: u32) -> u32
 {
     addr := address & 0xFFFFFF
+    addr += 0x400000
     when TEST_ENABLE {
         return u32(ram_mem[addr + 3]) | (u32(ram_mem[addr + 2]) << 8) |
                   (u32(ram_mem[addr + 1]) << 16) | (u32(ram_mem[addr]) << 24)
     } else {
         switch addr {
             //case 0x000000..<0x080000:       //RAM
-            //case 0x400000..<0x420000:       //ROM
-            //    return (cast(^u32)&rom_mem[address - 0x400000])^
+            case 0x400000..<0x420000:       //ROM
+                addr -= 0x400000
+                return u32(rom_mem[addr + 3]) | (u32(rom_mem[addr + 2]) << 8) |
+                    (u32(rom_mem[addr + 1]) << 16) | (u32(rom_mem[addr]) << 24)
             /*case 0x900000..<0xA00000:       //SCC_R/Phase adjust
             case 0xB00000..<0xC00000:       //SCC_W/Phase adjust
             case 0xD00000..<0xE00000:       //IWM
             case 0xE80000..<0xF00000:       //VIA
             case 0xF00000..<0xF80000:       //Phase read*/
             case:                           //Rest of memory
-                fmt.println(address)
+                fmt.println(addr)
                 panic("Unused mem access")
         }
     }
@@ -48,11 +51,11 @@ bus_read16 :: proc(address: u32) -> u16
         return u16(ram_mem[addr + 1]) | (u16(ram_mem[addr]) << 8)
     } else {
         switch addr {
-            //case 0x400000..<0x420000:       //ROM
-                //return (cast(^u16)&rom_mem[address - 0x400000])^
-                //return (u16(rom_mem[address - 0x400000 + 1]) | u16(rom_mem[address - 0x400000]) << 8)
+            case 0x400000..<0x420000:       //ROM
+                addr -= 0x400000
+                return u16(rom_mem[addr + 1]) | (u16(rom_mem[addr]) << 8)
             case:                           //Rest of memory
-                fmt.println(address)
+                fmt.println(addr)
                 panic("Unused mem access")
         }
     }
@@ -67,7 +70,7 @@ bus_read8 :: proc(address: u32) -> u8
     } else {
         switch addr {
             case:                           //Rest of memory
-                fmt.println(address)
+                fmt.println(addr)
                 panic("Unused mem access")
         }
     }
@@ -85,7 +88,7 @@ bus_write32 :: proc(address: u32, value: u32)
     } else {
         switch addr {
             case:                           //Rest of memory
-                fmt.println(address)
+                fmt.println(addr)
                 panic("Unused mem access")
         }
     }
@@ -100,7 +103,7 @@ bus_write16 :: proc(address: u32, value: u16)
     } else {
         switch addr {
             case:                           //Rest of memory
-                fmt.println(address)
+                fmt.println(addr)
                 panic("Unused mem access")
         }
     }
@@ -114,7 +117,7 @@ bus_write8 :: proc(address: u32, value: u8)
     } else {
         switch addr {
             case:                           //Rest of memory
-                fmt.println(address)
+                fmt.println(addr)
                 panic("Unused mem access")
         }
     }
