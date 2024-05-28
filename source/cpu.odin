@@ -12,11 +12,13 @@ import "base:intrinsics"
 --BCHG (643)
 --BCLR (653)
 --ABCD (2493)
+--MOVEM (787), (X)
 -Check use of SSR
 --Push/pop?
 -Correct prefetch timing
 -Dont allow illigal addressing modes
 -Interrupts
+-Move test RAM to testfile
 */
 @(private="file")
 Exception :: enum {
@@ -769,7 +771,7 @@ cpu_decode_4 :: proc(opcode: u16)
             } else if (opcode >> 6) & 3 == 0 {      //NBCD
                 cpu_nbcd(opcode)
             } else if (opcode >> 7) & 1 == 1 {      //MOVEM
-                //cpu_movem(opcode)
+                cpu_movem(opcode)
             }
         case 0xA:
             if (opcode >> 6) & 3 == 3 {
@@ -783,7 +785,7 @@ cpu_decode_4 :: proc(opcode: u16)
             }
         case 0xC:                       //MOVEM
             if (opcode >> 7) & 1 == 1 {
-                //cpu_movem(opcode)
+                cpu_movem(opcode)
             }
         case 0xE:
             sub_code := (opcode >> 4) & 0xF
@@ -2089,6 +2091,97 @@ cpu_jmp :: proc(opcode: u16) -> bool
     cycles = 8
     cpu_get_cycles_jmp_jsr(mode, reg)
     cpu_refetch()
+    return true
+}
+
+@(private="file")
+cpu_movem :: proc(opcode: u16) -> bool
+{
+    dr := (opcode >> 10) & 1
+    size := (opcode >> 6) & 1
+    mode := (opcode >> 3) & 7
+    reg := (opcode >> 0) & 7
+    list := cpu_fetch()
+
+    switch size {
+        case 0:
+            addr := cpu_get_address(mode, reg, .Word)
+            if dr == 1 {
+                a := u8(list >> 8)
+                d := u8(list)
+                for i:u16=0; i < 8; i+=1 {
+                    if ((d >> i) & 1) == 1 {
+                        data := i32(i16(cpu_get_ea_data16(mode, reg, addr) or_return))
+                        D[i] = u32(data)
+                        addr += 2
+                    }
+                }
+                for j:u16=0; j < 8; j+=1 {
+                    if ((a >> j) & 1) == 1 {
+                        data := i32(i16(cpu_get_ea_data16(mode, reg, addr) or_return))
+                        cpu_Areg_set(j, u32(data))
+                        addr += 2
+                    }
+                    if reg == 7 {
+                        if (a & 1) == 1 {
+                            //cpu_Areg_set(reg, addr)
+                        } else {
+                            cpu_Areg_set(reg, addr)
+                        }
+                    }
+                }
+            } else {
+                if mode == 4 {
+                    cycles -= 2
+                }
+                if (addr & 1) == 1 {
+                    if mode == 4 {
+                        A[reg] += 2
+                    }
+                    cpu_exception_addr(.Address, addr, false)
+                    return false
+                }
+                if mode == 4 {
+                    d := u8(list >> 8)
+                    a := u8(list)
+                    addr += 2
+                    for j:u16=0; j < 8; j+=1 {
+                        if ((a >> j) & 1) == 1 {
+                            addr -= 2
+                            cpu_Areg_set(reg, addr+4)
+                            data := cpu_Areg_get(7 - j)
+                            cpu_write16(addr, u16(data))
+                        }
+                    }
+                    for i:u16=0; i < 8; i+=1 {
+                        if ((d >> i) & 1) == 1 {
+                            addr -= 2
+                            cpu_Areg_set(reg, addr)
+                            cpu_write16(addr, u16(D[7 - i]))
+                        }
+                    }
+                } else {
+                    a := u8(list >> 8)
+                    d := u8(list)
+                    for i:u16=0; i < 8; i+=1 {
+                        if ((d >> i) & 1) == 1 {
+                            cpu_write16(addr, u16(D[i]))
+                            addr += 2
+                        }
+                    }
+                    for j:u16=0; j < 8; j+=1 {
+                        if ((a >> j) & 1) == 1 {
+                            cpu_write16(addr, u16(cpu_Areg_get(j)))
+                            addr += 2
+                        }
+                    }
+                }
+                cycles -= 4
+            }
+        case 1:
+    }
+    cycles += 4
+    cpu_prefetch()
     return true
 }
 
