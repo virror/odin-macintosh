@@ -44,7 +44,10 @@ Json_data :: struct {
 
 @(private="file")
 test_fail: bool
+@(private="file")
 fail_cnt: int
+@(private="file")
+ram_mem: [0x1000000]u8
 
 test_all :: proc()
 {

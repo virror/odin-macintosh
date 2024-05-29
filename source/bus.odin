@@ -3,7 +3,8 @@ package main
 import "core:fmt"
 import "core:os"
 
-ram_mem: [0x1000000]u8
+@(private="file")
+ram_mem: [0x80000]u8
 @(private="file")
 rom_mem: [0x20000]u8
 
