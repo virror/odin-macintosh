@@ -41,6 +41,7 @@ main :: proc()
 
     //Emu stuff
     debug_init(debug_render)
+    via_init()
     bus_init()
     cpu_init()
 

@@ -2099,10 +2099,10 @@ cpu_movem :: proc(opcode: u16) -> bool
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
     list := cpu_fetch()
+    addr := cpu_get_address(mode, reg, .Word)
 
     switch size {
         case 0:
-            addr := cpu_get_address(mode, reg, .Word)
             if dr == 1 {
                 a := u8(list >> 8)
                 d := u8(list)
