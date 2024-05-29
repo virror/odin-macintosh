@@ -1,9 +1,11 @@
 Info:
-https://archive.org/details/apple-guide-macintosh-family-hardware
-https://www.nxp.com/docs/en/reference-manual/MC68000UM.pdf
-https://www.nxp.com/docs/en/reference-manual/M68000PRM.pdf
-http://goldencrystal.free.fr/M68kOpcodes.pdf
-http://pasti.fxatari.com/68kdocs/68kPrefetch.html
+https://archive.org/details/apple-guide-macintosh-family-hardware		//Macintosh general info
+https://www.nxp.com/docs/en/reference-manual/MC68000UM.pdf			//68000 CPU reference
+https://www.nxp.com/docs/en/reference-manual/M68000PRM.pdf			//68000 Programmers reference
+http://goldencrystal.free.fr/M68kOpcodes.pdf					//Opcode summary
+http://pasti.fxatari.com/68kdocs/68kPrefetch.html				//Prefetch info
+https://gendev.spritesmind.net/forum/viewtopic.php?t=1964			//BCD instructions info
+https://vintageapple.org/inside_o/pdf/Inside_Macintosh_Volume_III_1985.pdf	//Hardware info for 256/512k versions
 
 Tests:
 https://github.com/TomHarte/ProcessorTests/tree/main/680x0/68000/v1
