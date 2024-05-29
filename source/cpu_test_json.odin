@@ -5,9 +5,9 @@ import "core:os"
 import "core:encoding/json"
 
 TEST_ENABLE :: true
-TEST_ALL :: false
+TEST_ALL :: true
 TEST_FILE :: "tests/SUB.l.json"
-TEST_BREAK_ERROR :: true
+TEST_BREAK_ERROR :: false
 
 @(private="file")
 Registers :: struct {
@@ -115,15 +115,15 @@ test_run :: proc(json_data: Json_data)
     sr = SR(json_data.initial.sr)
     pc = json_data.initial.pc
 
-    bus_write16(pc, json_data.initial.prefetch[0])
-    bus_write16(pc + 2, json_data.initial.prefetch[1])
+    bus_write(16, pc, u32(json_data.initial.prefetch[0]))
+    bus_write(16, pc + 2, u32(json_data.initial.prefetch[1]))
     prefetch[0] = json_data.initial.prefetch[0]
     prefetch[2] = json_data.initial.prefetch[1]
 
     ram_length := len(json_data.initial.ram)
     for i:= 0; i < ram_length; i += 1 {
         mem_val := json_data.initial.ram[i]
-        bus_write8(mem_val[0], u8(mem_val[1]))
+        bus_write(8, mem_val[0], u32(mem_val[1]))
     }
 
     //Run opcode
@@ -196,7 +196,7 @@ test_run :: proc(json_data: Json_data)
     final_ram_length := len(json_data.final.ram)
     for i:= 0; i < final_ram_length; i += 1 {
         final := json_data.final.ram[i]
-        data := bus_read8(final[0])
+        data := u8(bus_read(8, final[0]))
         if u32(data) != final[1] {
             error_string = fmt.aprintf("Fail: ram at %d: %d != %d", final[0], data, final[1])
         }
@@ -214,4 +214,34 @@ test_run :: proc(json_data: Json_data)
         fail_cnt += 1
     }
     exit = true
+}
+
+test_read :: proc(size: u8, addr: u32) -> u32
+{
+    switch size {
+        case 8:
+            return u32(ram_mem[addr])
+        case 16:
+            return u32(ram_mem[addr + 1]) | (u32(ram_mem[addr]) << 8)
+        case 32:
+            return u32(ram_mem[addr + 3]) | (u32(ram_mem[addr + 2]) << 8) |
+              (u32(ram_mem[addr + 1]) << 16) | (u32(ram_mem[addr]) << 24)
+    }
+    return 0
+}
+
+test_write :: proc(size: u8, addr: u32, value: u32)
+{
+    switch size {
+        case 8:
+            ram_mem[addr] = u8(value)
+        case 16:
+            ram_mem[addr + 1] = u8(value & 0xFF)
+            ram_mem[addr + 0] = u8((value >> 8) & 0xFF)
+        case 32:
+            ram_mem[addr + 3] = u8(value & 0xFF)
+            ram_mem[addr + 2] = u8((value >> 8) & 0xFF)
+            ram_mem[addr + 1] = u8((value >> 16) & 0xFF)
+            ram_mem[addr + 0] = u8((value >> 24) & 0xFF)
+    }
 }

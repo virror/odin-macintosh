@@ -116,9 +116,9 @@ cpu_init :: proc()
 @(private="file")
 cpu_refetch :: proc()
 {
-    prefetch[2] = bus_read16(pc)
+    prefetch[2] = u16(bus_read(16, pc))
     prefetch[1] = prefetch[2]
-    prefetch[2] = bus_read16(pc + 2)
+    prefetch[2] = u16(bus_read(16, pc + 2))
     prefetch[0] = prefetch[1]
 }
 
@@ -127,7 +127,7 @@ cpu_prefetch :: proc()
 {
     pc += 2
     prefetch[1] = prefetch[2]
-    prefetch[2] = bus_read16(pc + 2)
+    prefetch[2] = u16(bus_read(16, pc + 2))
     prefetch[0] = prefetch[1]
     cycles += 4
 }
@@ -137,7 +137,7 @@ cpu_fetch :: proc() -> u16
 {
     ret := prefetch[2]
     pc += 2
-    prefetch[2] = bus_read16(pc + 2)
+    prefetch[2] = u16(bus_read(16, pc + 2))
     cycles += 4
     return ret
 }
@@ -371,7 +371,7 @@ cpu_get_ea_data32 :: proc(mode: u16, reg: u16, addr: u32) -> (u32, bool)
 cpu_read8 :: proc(addr: u32) -> (u8)
 {
     cycles += 4
-    return bus_read8(addr)
+    return u8(bus_read(8, addr))
 }
 
 @(private="file")
@@ -382,7 +382,7 @@ cpu_read16 :: proc(addr: u32) -> (u16, bool)
         return 0, false
     }
     cycles += 4
-    return bus_read16(addr), true
+    return u16(bus_read(16, addr)), true
 }
 
 @(private="file")
@@ -393,13 +393,13 @@ cpu_read32 :: proc(addr: u32) -> (u32, bool)
         return 0, false
     }
     cycles += 8
-    return bus_read32(addr), true
+    return bus_read(32, addr), true
 }
 
 @(private="file")
 cpu_write8 :: proc(addr: u32, value: u8)
 {
-    bus_write8(addr, value)
+    bus_write(8, addr, u32(value))
     cycles += 4
 }
 
@@ -410,7 +410,7 @@ cpu_write16 :: proc(addr: u32, value: u16) -> bool
         cpu_exception_addr(.Address, addr, false)
         return false
     }
-    bus_write16(addr, value)
+    bus_write(16, addr, u32(value))
     cycles += 4
     return true
 }
@@ -422,7 +422,7 @@ cpu_write32 :: proc(addr: u32, value: u32) -> bool
         cpu_exception_addr(.Address, addr, false)
         return false
     }
-    bus_write32(addr, value)
+    bus_write(32, addr, value)
     cycles += 8
     return true
 }
@@ -526,8 +526,8 @@ cpu_exception_reset :: proc()
     sr.super = true
     sr.trace = 0
     sr.intr_mask = 7    //TODO; Check this
-    ssp = bus_read32(0x00)
-    pc = bus_read32(0x04)
+    ssp = bus_read(32, 0x00)
+    pc = bus_read(32, 0x04)
     cpu_refetch()
     stop = false
 }
@@ -542,9 +542,9 @@ cpu_exception :: proc(exc: Exception)
     sr.intr_mask = 7    //TODO; Check this
 
     ssp -= 4
-    bus_write32(ssp, pc)
+    bus_write(32, ssp, pc)
     ssp -= 2
-    bus_write16(ssp, tmp_sr)
+    bus_write(16, ssp, u32(tmp_sr))
     #partial switch exc {
         case .Illegal:
             exc_vec = 16
@@ -578,7 +578,7 @@ cpu_exception :: proc(exc: Exception)
             cycles += 44
             stop = false
     }
-    pc = bus_read32(exc_vec)
+    pc = bus_read(32, exc_vec)
     cpu_refetch()
 }
 
@@ -593,9 +593,9 @@ cpu_exception_addr :: proc(exc: Exception, addr: u32, rw: bool, i_n: bool = fals
     sr.trace = 0
 
     ssp -= 4
-    bus_write32(ssp, pc)
+    bus_write(32, ssp, pc)
     ssp -= 2
-    bus_write16(ssp, tmp_sr)
+    bus_write(16, ssp, u32(tmp_sr))
     #partial switch exc {
         case .Bus:
             exc_vec = 8
@@ -605,16 +605,16 @@ cpu_exception_addr :: proc(exc: Exception, addr: u32, rw: bool, i_n: bool = fals
             cycles += 50
     }
     ssp -= 2
-    bus_write16(ssp, current_op)
+    bus_write(16, ssp, u32(current_op))
     ssp -= 4
-    bus_write32(ssp, addr)
+    bus_write(32, ssp, addr)
     ssp -= 2
     flags:u16= ((current_op & 0xFFE0))
     flags |= u16(rw) << 4
     flags |= u16(i_n) << 3
     flags |= function_code
-    bus_write16(ssp, flags)
-    pc = bus_read32(exc_vec)
+    bus_write(16, ssp, u32(flags))
+    pc = bus_read(32, exc_vec)
     cpu_refetch()
 }
 
@@ -1216,7 +1216,7 @@ cpu_move :: proc(opcode: u16) -> bool
                 D[reg] &= 0xFFFFFF00
                 D[reg] |= u32(ea_data)
             } else {
-                bus_write8(addr, ea_data)
+                bus_write(8, addr, u32(ea_data)) //Do cpu_read?
             }
             sr.v = false
             sr.c = false
@@ -1999,9 +1999,9 @@ cpu_stop :: proc(opcode: u16)
 cpu_rte :: proc(opcode: u16) -> bool
 {
     if sr.super {
-        sr = SR(bus_read16(ssp) & 0xA71F)
+        sr = SR(bus_read(16, ssp) & 0xA71F)
         ssp += 2
-        new_pc := bus_read32(ssp)
+        new_pc := bus_read(32, ssp)
         ssp += 4
         cycles += 12
         cpu_pc_set(new_pc) or_return
@@ -2017,7 +2017,7 @@ cpu_rte :: proc(opcode: u16) -> bool
 @(private="file")
 cpu_rts :: proc(opcode: u16) -> bool
 {
-    tmp_pc := bus_read32(ssp)
+    tmp_pc := bus_read(32, ssp)
     ssp += 4
     cycles += 8
     cpu_pc_set(tmp_pc) or_return
@@ -2041,9 +2041,9 @@ cpu_trapv :: proc(opcode: u16)
 cpu_rtr :: proc(opcode: u16) -> bool
 {
     sr &= SR(0xFF00)
-    sr |= SR(bus_read16(ssp) & 0x1F)
+    sr |= SR(bus_read(16, ssp) & 0x1F)
     ssp += 2
-    tmp_pc := bus_read32(ssp)
+    tmp_pc := bus_read(32, ssp)
     ssp += 4
     cycles += 12
     cpu_pc_set(tmp_pc) or_return
@@ -2063,7 +2063,7 @@ cpu_jsr :: proc(opcode: u16) -> bool
     cpu_get_cycles_jmp_jsr(mode, reg)
     if (addr & 1) == 0 {
         ssp -= 4
-        bus_write32(ssp, pc + 2)
+        bus_write(32, ssp, pc + 2)
     }
     cpu_pc_set(addr) or_return
     cycles += 16
