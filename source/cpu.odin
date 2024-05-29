@@ -6,7 +6,6 @@ import "base:intrinsics"
 
 /*TODO:
 -Finish instructions and pass tests
---CHK (1265)
 --MOVE.w, l (4531), (4478)
 --BSET (661)
 --BCHG (643)
@@ -539,7 +538,6 @@ cpu_exception :: proc(exc: Exception)
     tmp_sr := u16(sr)
     sr.super = true
     sr.trace = 0
-    sr.intr_mask = 7    //TODO; Check this
 
     ssp -= 4
     bus_write(32, ssp, pc)
@@ -2214,15 +2212,17 @@ cpu_chk :: proc(opcode: u16) -> bool
         if data < 0 {
             sr.n = true
         }
-        if data > ea_data {
+        else if data > ea_data {
             sr.n = false
+        }
+        if data > ea_data {
             cycles -= 2
         }
         pc += 2
         cpu_exception(.CHK)
         return false
     }
-    cycles += 2
+    cycles += 6
     cpu_prefetch()
     return true
 }
