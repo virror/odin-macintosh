@@ -7,15 +7,12 @@ import "base:intrinsics"
 /*TODO:
 -Finish instructions and pass tests
 --MOVE.w, l (4531), (4478)
---BSET (661)
---BCHG (643)
---BCLR (653)
 --ABCD (2493)
 --MOVEM (787), (X)
 -Check use of SSP
 --Push/pop?
 -Correct prefetch timing
--Dont allow illigal addressing modes
+-Dont allow illegal addressing modes
 -Interrupts
 */
 @(private="file")
@@ -1429,15 +1426,27 @@ cpu_bit :: proc(opcode: u16, mem: bool, bitop: BitOp) -> bool
             case .Set:
                 ea_data |= (1 << shift)
                 D[reg] = ea_data
-                cycles += 4
+                if shift < 16 {
+                    cycles += 2
+                } else {
+                    cycles += 4
+                }
             case .Clear:
                 ea_data &= (0xFFFFFFFF ~ (1 << shift))
                 D[reg] = ea_data
-                cycles += 4
+                if shift < 16 {
+                    cycles += 4
+                } else {
+                    cycles += 6
+                }
             case .Change:
                 ea_data ~= (1 << shift)
                 D[reg] = ea_data
-                cycles += 4
+                if shift < 16 {
+                    cycles += 2
+                } else {
+                    cycles += 4
+                }
             case .Test:
                 cycles += 2
         }
