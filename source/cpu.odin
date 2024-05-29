@@ -8,7 +8,7 @@ import "base:intrinsics"
 -Finish instructions and pass tests
 --MOVE.w, l (4531), (4478)
 --ABCD (2493)
---MOVEM (787), (X)
+--MOVEM (787), (254)
 -Check use of SSP
 --Push/pop?
 -Correct prefetch timing
@@ -2183,6 +2183,78 @@ cpu_movem :: proc(opcode: u16) -> bool
                 cycles -= 4
             }
         case 1:
+            if dr == 1 {
+                a := u8(list >> 8)
+                d := u8(list)
+                for i:u16=0; i < 8; i+=1 {
+                    if ((d >> i) & 1) == 1 {
+                        data := i32(cpu_get_ea_data32(mode, reg, addr) or_return)
+                        D[i] = u32(data)
+                        addr += 4
+                    }
+                }
+                for j:u16=0; j < 8; j+=1 {
+                    if ((a >> j) & 1) == 1 {
+                        data := i32(cpu_get_ea_data32(mode, reg, addr) or_return)
+                        cpu_Areg_set(j, u32(data))
+                        addr += 4
+                        if reg == j && mode == 3 {
+                            cpu_Areg_set(reg, addr+12)
+                        }
+                    }
+                }
+                if mode == 3 {
+                    if ((a >> reg) & 1) == 1 {
+                        cpu_Areg_set(reg, addr)
+                    }
+                }
+            } else {
+                if (addr & 1) == 1 {
+                    if mode == 4 {
+                        A[reg] += 2
+                        cycles -= 2
+                    }
+                    cpu_exception_addr(.Address, addr, false)
+                    return false
+                }
+                if mode == 4 {
+                    cycles -= 2
+                    d := u8(list >> 8)
+                    a := u8(list)
+                    addr += 2
+                    for j:u16=0; j < 8; j+=1 {
+                        if ((a >> j) & 1) == 1 {
+                            addr -= 4
+                            cpu_Areg_set(reg, addr+4)
+                            data := cpu_Areg_get(7 - j)
+                            cpu_write32(addr, data)
+                        }
+                    }
+                    for i:u16=0; i < 8; i+=1 {
+                        if ((d >> i) & 1) == 1 {
+                            addr -= 4
+                            cpu_Areg_set(reg, addr)
+                            cpu_write32(addr, D[7 - i])
+                        }
+                    }
+                } else {
+                    a := u8(list >> 8)
+                    d := u8(list)
+                    for i:u16=0; i < 8; i+=1 {
+                        if ((d >> i) & 1) == 1 {
+                            cpu_write32(addr, D[i])
+                            addr += 4
+                        }
+                    }
+                    for j:u16=0; j < 8; j+=1 {
+                        if ((a >> j) & 1) == 1 {
+                            cpu_write32(addr, cpu_Areg_get(j))
+                            addr += 4
+                        }
+                    }
+                }
+                cycles -= 4
+            }
     }
     cycles += 4
     cpu_prefetch()
