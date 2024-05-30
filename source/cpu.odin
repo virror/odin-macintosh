@@ -7,7 +7,6 @@ import "base:intrinsics"
 /*TODO:
 -Finish instructions and pass tests
 --MOVE.w, l (355), (377)
---ABCD (2493)
 -Check use of SSP
 --Push/pop?
 -Correct prefetch timing
@@ -3289,7 +3288,7 @@ cpu_abcd :: proc(opcode: u16)
     }
     ss := data1 + data2 + u8(sr.x)
     bc := ((data1 & data2) | (~ss & data1) | (~ss & data2)) & 0x88
-    dc := u8((u16((ss + 0x66) ~ ss) & 0x110) >> 1)
+    dc := u8((((u16(ss) + 0x66) ~ u16(ss)) & 0x110) >> 1)
 	corf := (bc | dc) - ((bc | dc) >> 2)
 	res := ss + corf
     sr.c = bool((bc | (ss & ~res)) >> 7)
