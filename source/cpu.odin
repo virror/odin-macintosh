@@ -6,7 +6,7 @@ import "base:intrinsics"
 
 /*TODO:
 -Finish instructions and pass tests
---MOVE.w, l (4531), (4478)
+--MOVE.w, l (355), (377)
 --ABCD (2493)
 -Check use of SSP
 --Push/pop?
@@ -1224,7 +1224,7 @@ cpu_move :: proc(opcode: u16) -> bool
                 D[reg] &= 0xFFFFFF00
                 D[reg] |= u32(ea_data)
             } else {
-                bus_write(8, addr, u32(ea_data)) //Do cpu_read?
+                bus_write(8, addr, u32(ea_data))
             }
             sr.v = false
             sr.c = false
@@ -1233,27 +1233,42 @@ cpu_move :: proc(opcode: u16) -> bool
         case 3:
             addr2 := cpu_get_address(mode2, reg2, .Word)
             ea_data := cpu_get_ea_data16(mode2, reg2, addr2) or_return
-            addr := cpu_get_address(mode, reg, .Word)
-            cpu_get_ea_data16(mode, reg, addr) or_return
             sr.v = false
             sr.c = false
             sr.n = bool((ea_data >> 15) & 1)
             sr.z = bool(ea_data == 0)
+            addr := cpu_get_address(mode, reg, .Word)
+
+            if (addr & 1) == 1 {
+                if mode == 3 {
+                    A[reg] -= 2 //TODO: Use a reg function
+                }
+                cpu_exception_addr(.Address, addr, false)
+                return false
+            }
             if mode == 0 {
                 D[reg] &= 0xFFFF0000
                 D[reg] |= u32(ea_data)
             } else {
-                cpu_write16(addr, ea_data)
+                cycles += 4
+                bus_write(16, addr, u32(ea_data))
             }
         case 2:
             addr2 := cpu_get_address(mode2, reg2, .Long)
             ea_data := cpu_get_ea_data32(mode2, reg2, addr2) or_return
-            addr := cpu_get_address(mode, reg, .Long)
-            cpu_get_ea_data32(mode, reg, addr) or_return
             sr.v = false
             sr.c = false
             sr.n = bool((ea_data >> 31) & 1)
             sr.z = bool(ea_data == 0)
+            addr := cpu_get_address(mode, reg, .Long)
+
+            if (addr & 1) == 1 {
+                if mode == 3 {
+                    A[reg] -= 4 //TODO: Use a reg function
+                }
+                cpu_exception_addr(.Address, addr, false)
+                return false
+            }
             if mode == 0 {
                 D[reg] = u32(ea_data)
             } else {
@@ -2149,7 +2164,7 @@ cpu_movem :: proc(opcode: u16) -> bool
                 }
                 if (addr & 1) == 1 {
                     if mode == 4 {
-                        A[reg] += 2
+                        A[reg] += 2 //TODO: Use a reg function
                     }
                     cpu_exception_addr(.Address, addr, false)
                     return false
