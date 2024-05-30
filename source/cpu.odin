@@ -11,7 +11,6 @@ import "base:intrinsics"
 --Push/pop?
 -Correct prefetch timing
 -Dont allow illegal addressing modes
--Interrupts
 */
 @(private="file")
 Exception :: enum {
@@ -81,10 +80,9 @@ SR :: bit_field u16 {
     z: bool         | 1,
     n: bool         | 1,
     x: bool         | 1,
-    na2: u8         | 3,
+    na1: u8         | 3,
     intr_mask: u8   | 3,
-    na1: bool       | 1,
-    intr_enbl: bool | 1,
+    na2: bool       | 2,
     super: bool     | 1,
     trace: u8       | 2,
 }
@@ -102,6 +100,8 @@ cycles: u32
 stop: bool
 @(private="file")
 current_op: u16
+@(private="file")
+irq_req: u8
 
 cpu_init :: proc()
 {
@@ -144,7 +144,18 @@ cpu_step :: proc() -> u32
         return 0
     }
     cpu_decode(prefetch[0])
+    if irq_req > 0 {
+        cpu_exception_irq(irq_req)
+        irq_req = 0
+    }
     return cycles
+}
+
+cpu_interrupt :: proc(irq: u8)
+{
+    if irq == 7 || irq > sr.intr_mask {
+        irq_req = irq
+    }
 }
 
 @(private="file")
@@ -527,6 +538,7 @@ cpu_exception_reset :: proc()
     pc = bus_read(32, 0x04)
     cpu_refetch()
     stop = false
+    irq_req = 0
 }
 
 @(private="file")
@@ -570,10 +582,6 @@ cpu_exception :: proc(exc: Exception)
         case .Uninitialized:
             exc_vec = 60
             cycles += 44 //?
-         case .Interrupt:
-            exc_vec = 64 //TODO: Check this
-            cycles += 44
-            stop = false
         case .Spurious:
             exc_vec = 96
             cycles += 44 //?
@@ -582,6 +590,24 @@ cpu_exception :: proc(exc: Exception)
             cycles += 34
     }
     pc = bus_read(32, exc_vec)
+    cpu_refetch()
+}
+
+@(private="file")
+cpu_exception_irq :: proc(irq: u8)
+{
+    tmp_sr := u16(sr)
+    sr.super = true
+    sr.trace = 0
+
+    ssp -= 4
+    bus_write(32, ssp, pc)
+    ssp -= 2
+    bus_write(16, ssp, u32(tmp_sr))
+    exc_vec := 60 + (irq * 4)
+    cycles += 44
+    stop = false
+    pc = bus_read(32, u32(exc_vec))
     cpu_refetch()
 }
 
