@@ -8,7 +8,6 @@ import "base:intrinsics"
 -Finish instructions and pass tests
 --MOVE.w, l (4531), (4478)
 --ABCD (2493)
---MOVEM (787), (254)
 -Check use of SSP
 --Push/pop?
 -Correct prefetch timing
@@ -524,7 +523,7 @@ cpu_exception_reset :: proc()
 {
     sr.super = true
     sr.trace = 0
-    sr.intr_mask = 7    //TODO; Check this
+    sr.intr_mask = 7
     ssp = bus_read(32, 0x00)
     pc = bus_read(32, 0x04)
     cpu_refetch()
@@ -2140,13 +2139,9 @@ cpu_movem :: proc(opcode: u16) -> bool
                         cpu_Areg_set(j, u32(data))
                         addr += 2
                     }
-                    if reg == 7 {
-                        if (a & 1) == 1 {
-                            //cpu_Areg_set(reg, addr)
-                        } else {
-                            cpu_Areg_set(reg, addr)
-                        }
-                    }
+                }
+                if mode == 3 {
+                    cpu_Areg_set(reg, addr)
                 }
             } else {
                 if mode == 4 {
@@ -2163,12 +2158,17 @@ cpu_movem :: proc(opcode: u16) -> bool
                     d := u8(list >> 8)
                     a := u8(list)
                     addr += 2
+                    orig_addr := addr
                     for j:u16=0; j < 8; j+=1 {
                         if ((a >> j) & 1) == 1 {
                             addr -= 2
-                            cpu_Areg_set(reg, addr+4)
+                            cpu_Areg_set(reg, addr)
                             data := cpu_Areg_get(7 - j)
-                            cpu_write16(addr, u16(data))
+                            if (7 - j) == reg {
+                                cpu_write16(addr, u16(orig_addr))
+                            } else {
+                                cpu_write16(addr, u16(data))
+                            }
                         }
                     }
                     for i:u16=0; i < 8; i+=1 {
@@ -2218,9 +2218,7 @@ cpu_movem :: proc(opcode: u16) -> bool
                     }
                 }
                 if mode == 3 {
-                    if ((a >> reg) & 1) == 1 {
-                        cpu_Areg_set(reg, addr)
-                    }
+                    cpu_Areg_set(reg, addr)
                 }
             } else {
                 if (addr & 1) == 1 {
@@ -2236,12 +2234,17 @@ cpu_movem :: proc(opcode: u16) -> bool
                     d := u8(list >> 8)
                     a := u8(list)
                     addr += 2
+                    orig_addr := addr
                     for j:u16=0; j < 8; j+=1 {
                         if ((a >> j) & 1) == 1 {
                             addr -= 4
-                            cpu_Areg_set(reg, addr+4)
+                            cpu_Areg_set(reg, addr)
                             data := cpu_Areg_get(7 - j)
-                            cpu_write32(addr, data)
+                            if (7 - j) == reg {
+                                cpu_write32(addr, orig_addr)
+                            } else {
+                                cpu_write32(addr, data)
+                            }
                         }
                     }
                     for i:u16=0; i < 8; i+=1 {
