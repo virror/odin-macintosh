@@ -648,7 +648,7 @@ cpu_decode :: proc(opcode: u16) -> u32
         case 0x9:
             cpu_decode_9(opcode)
         case 0xA:
-            fmt.println("A")
+            cpu_line1010(opcode)
         case 0xB:
             cpu_decode_B(opcode)
         case 0xC:
@@ -658,7 +658,7 @@ cpu_decode :: proc(opcode: u16) -> u32
         case 0xE:
             cpu_decode_E(opcode)
         case 0xF:
-            fmt.println("F")
+            cpu_line1111(opcode)
     }
     if cycles == 0 {
         cpu_exception(.Illegal)
