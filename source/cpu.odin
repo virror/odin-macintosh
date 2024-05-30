@@ -11,6 +11,7 @@ import "base:intrinsics"
 --Push/pop?
 -Correct prefetch timing
 -Dont allow illegal addressing modes
+-Exception timing?
 */
 @(private="file")
 Exception :: enum {
@@ -172,7 +173,6 @@ cpu_Areg_set :: proc(reg: u16, value: u32)
     }
 }
 
-@(private="file")
 cpu_Areg_get :: proc(reg: u16) -> u32
 {
     if reg == 7 {
