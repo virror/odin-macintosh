@@ -30,6 +30,8 @@ Exception :: enum {
     Address,
     Zero,
     CHK,
+    Line1010,
+    Line1111,
 }
 
 @(private="file")
@@ -508,7 +510,8 @@ cpu_get_exc_group :: proc(exc: Exception) -> u8
     switch exc {
         case .Reset, .Address, .Bus:
             return 0
-        case .Trace, .Interrupt, .Illegal, .Privilege, .Spurious, .Uninitialized:
+        case .Trace, .Interrupt, .Illegal, .Privilege, .Spurious,
+             .Uninitialized, .Line1010, .Line1111:
             return 1
         case .Trap, .CHK, .Zero, .TrapV:
             return 2
@@ -553,9 +556,6 @@ cpu_exception :: proc(exc: Exception)
         case .TrapV:
             exc_vec = 28
             cycles += 34
-        case .Trap:
-            exc_vec = 128 + (u32(current_op & 0xF) << 2)
-            cycles += 34
         case .Privilege:
             exc_vec = 32
             cycles += 34
@@ -563,15 +563,25 @@ cpu_exception :: proc(exc: Exception)
             exc_vec = 36
             cycles += 34
             stop = false
+        case .Line1010:
+            exc_vec = 40
+            cycles += 34 //?
+        case .Line1111:
+            exc_vec = 44
+            cycles += 34 //?
         case .Uninitialized:
             exc_vec = 60
             cycles += 44 //?
+         case .Interrupt:
+            exc_vec = 64 //TODO: Check this
+            cycles += 44
+            stop = false
         case .Spurious:
             exc_vec = 96
             cycles += 44 //?
-        case .Interrupt:
-            cycles += 44
-            stop = false
+        case .Trap:
+            exc_vec = 128 + (u32(current_op & 0xF) << 2)
+            cycles += 34
     }
     pc = bus_read(32, exc_vec)
     cpu_refetch()
@@ -639,6 +649,8 @@ cpu_decode :: proc(opcode: u16) -> u32
             cpu_decode_8(opcode)
         case 0x9:
             cpu_decode_9(opcode)
+        case 0xA:
+            fmt.println("A")
         case 0xB:
             cpu_decode_B(opcode)
         case 0xC:
@@ -647,6 +659,8 @@ cpu_decode :: proc(opcode: u16) -> u32
             cpu_decode_D(opcode)
         case 0xE:
             cpu_decode_E(opcode)
+        case 0xF:
+            fmt.println("F")
     }
     if cycles == 0 {
         cpu_exception(.Illegal)
@@ -3912,6 +3926,18 @@ cpu_rod_reg :: proc(opcode: u16)
     sr.v = false
     cycles += 2 + 2 * u32(cnt)
     cpu_prefetch()
+}
+
+@(private="file")
+cpu_line1010 :: proc(opcode: u16)
+{
+    cpu_exception(.Line1010)
+}
+
+@(private="file")
+cpu_line1111 :: proc(opcode: u16)
+{
+    cpu_exception(.Line1111)
 }
 
 @(private="file")
