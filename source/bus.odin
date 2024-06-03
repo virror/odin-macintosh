@@ -32,6 +32,7 @@ bus_read :: proc(size: u8, address: u32) -> u32
                     addr -= 0x400000
                     return bus_read_rom(size, addr)
                 case 0x600000..<0x680000:       //RAM
+                    addr -= 0x600000
                     return bus_read_ram(size, addr)
                 /*case 0x900000..<0xA00000:       //SCC_R/Phase adjust
                 case 0xB00000..<0xC00000:       //SCC_W/Phase adjust
@@ -71,6 +72,7 @@ bus_write :: proc(size: u8, address: u32, value: u32)
                 /*case 0x000000..<0x080000:       //ROM
                 case 0x400000..<0x420000:       //ROM*/
                 case 0x600000..<0x680000:       //RAM
+                    addr -= 0x600000
                     bus_write_ram(size, addr, value)
                 /*case 0x900000..<0xA00000:       //SCC_R/Phase adjust
                 case 0xB00000..<0xC00000:       //SCC_W/Phase adjust
