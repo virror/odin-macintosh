@@ -34,9 +34,21 @@ bus_read :: proc(size: u8, address: u32) -> u32
                 case 0x600000..<0x680000:       //RAM
                     addr -= 0x600000
                     return bus_read_ram(size, addr)
-                /*case 0x900000..<0xA00000:       //SCC_R/Phase adjust
+                case 0x900000..<0xA00000:       //SCC_R/Phase adjust
+                    if size == 8 {
+                        return scc_read(addr)
+                    } else {
+                        fmt.println(addr)
+                        return 0
+                    }
                 case 0xB00000..<0xC00000:       //SCC_W/Phase adjust
-                case 0xD00000..<0xE00000:       //IWM*/
+                    if size == 8 {
+                        return scc_read(addr)
+                    } else {
+                        fmt.println(addr)
+                        return 0
+                    }
+                //case 0xD00000..<0xE00000:       //IWM
                 case 0xE80000..<0xF00000:       //VIA
                     return via_read(size, addr)
                 //case 0xF00000..<0xF80000:       //Phase read
@@ -74,9 +86,19 @@ bus_write :: proc(size: u8, address: u32, value: u32)
                 case 0x600000..<0x680000:       //RAM
                     addr -= 0x600000
                     bus_write_ram(size, addr, value)
-                /*case 0x900000..<0xA00000:       //SCC_R/Phase adjust
+                case 0x900000..<0xA00000:       //SCC_R/Phase adjust
+                    if size == 8 {
+                        scc_write(addr, value)
+                    } else {
+                        fmt.println(addr)
+                    }
                 case 0xB00000..<0xC00000:       //SCC_W/Phase adjust
-                case 0xD00000..<0xE00000:       //IWM*/
+                    if size == 8 {
+                        scc_write(addr, value)
+                    } else {
+                        fmt.println(addr)
+                    }
+                //case 0xD00000..<0xE00000:       //IWM
                 case 0xE80000..<0xF00000:       //VIA
                     via_write(size, addr, value)
                 //case 0xF00000..<0xF80000:       //Phase read
