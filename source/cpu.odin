@@ -6,7 +6,7 @@ import "base:intrinsics"
 
 /*TODO:
 -Finish instructions and pass tests
---MOVE.w, l (355), (377)
+--MOVE.w, l (23), (26)
 -Check use of SSP
 --Push/pop?
 -Correct prefetch timing
@@ -1268,6 +1268,10 @@ cpu_move :: proc(opcode: u16) -> bool
                 if mode == 3 {
                     A[reg] -= 2 //TODO: Use a reg function
                 }
+                if mode == 4 {
+                    cycles += 2
+                    pc += 2
+                }
                 cpu_exception_addr(.Address, addr, false)
                 return false
             }
@@ -1285,11 +1289,15 @@ cpu_move :: proc(opcode: u16) -> bool
             sr.c = false
             sr.n = bool((ea_data >> 31) & 1)
             sr.z = bool(ea_data == 0)
-            addr := cpu_get_address(mode, reg, .Long)
+            addr := cpu_get_address(mode, reg, .Long, true)
 
             if (addr & 1) == 1 {
                 if mode == 3 {
                     A[reg] -= 4 //TODO: Use a reg function
+                }
+                if mode == 4 {
+                    cycles += 2
+                    pc += 2
                 }
                 cpu_exception_addr(.Address, addr, false)
                 return false
