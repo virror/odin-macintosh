@@ -8,6 +8,7 @@ WIN_WIDTH :: 1024
 WIN_HEIGHT :: 512
 
 exit := false
+@(private="file")
 pause := true
 @(private="file")
 step := false
@@ -80,6 +81,12 @@ update :: proc()
 {
     render_screen()
     handle_events()
+}
+
+pause :: proc()
+{
+    pause = true
+    draw_debug_window()
 }
 
 @(private="file")
