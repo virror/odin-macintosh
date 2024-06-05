@@ -4,8 +4,8 @@ import "core:os"
 import sdl "vendor:sdl2"
 import sdlttf "vendor:sdl2/ttf"
 
-WIN_WIDTH :: 1024
-WIN_HEIGHT :: 512
+WIN_WIDTH :: 512
+WIN_HEIGHT :: 342
 
 exit := false
 @(private="file")
@@ -120,6 +120,9 @@ handle_dbg_keys :: proc(event: ^sdl.Event)
                 exit = true
             case sdl.Keycode.TAB:
                 debug_switch()
+            case sdl.Keycode.d:
+                gpu_draw()
+                update()
         }
     }
 }

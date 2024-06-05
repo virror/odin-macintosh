@@ -36,6 +36,7 @@ render_init :: proc(window2: ^sdl.Window)
     shader_program = shader_create(vert_shader, frag_shader)
 
     gl.UseProgram(shader_program)
+    create_quad({1,1}, {1,-1}, {-1, 1}, {-1, -1}, {1,1,1}, {1,1,1}, {1,1,1}, {1,1,1})
 }
 
 update_viewport :: proc(w: i32, h: i32)
@@ -131,7 +132,7 @@ render_screen :: proc()
     sdl.GL_SwapWindow(window)
 }
 
-texture_create :: proc(w: i32, h: i32, vram: ^u16) -> u32
+texture_create :: proc(w: i32, h: i32, vram: ^u8) -> u32
 {
     gl.GenTextures(1, &texture)
     gl.BindTexture(gl.TEXTURE_2D, texture)
@@ -140,8 +141,7 @@ texture_create :: proc(w: i32, h: i32, vram: ^u16) -> u32
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-    gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 1024)
-    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, w, h, 0, gl.RGBA, gl.UNSIGNED_SHORT_1_5_5_5_REV, vram)
+    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, w, h, 0, gl.RGB, gl.UNSIGNED_BYTE_2_3_3_REV, vram)
 
     return texture
 }

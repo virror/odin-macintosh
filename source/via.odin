@@ -172,7 +172,7 @@ via_write :: proc(size: u8, address: u32, value: u32)
     }
 }
 
-via_get_overlay :: proc() -> bool
+via_get_regA :: proc() -> RegisterA
 {
-    return registerA.overlay
+    return registerA
 }
