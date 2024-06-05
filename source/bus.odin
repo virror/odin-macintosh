@@ -48,7 +48,8 @@ bus_read :: proc(size: u8, address: u32) -> u32
                         fmt.println(addr)
                         return 0
                     }
-                //case 0xD00000..<0xE00000:       //IWM
+                case 0xD00000..<0xE00000:       //IWM
+                    return iwm_read(size, addr)
                 case 0xE80000..<0xF00000:       //VIA
                     return via_read(size, addr)
                 //case 0xF00000..<0xF80000:       //Phase read
@@ -98,7 +99,8 @@ bus_write :: proc(size: u8, address: u32, value: u32)
                     } else {
                         fmt.println(addr)
                     }
-                //case 0xD00000..<0xE00000:       //IWM
+                case 0xD00000..<0xE00000:       //IWM
+                    iwm_write(size, addr, value)
                 case 0xE80000..<0xF00000:       //VIA
                     via_write(size, addr, value)
                 //case 0xF00000..<0xF80000:       //Phase read
