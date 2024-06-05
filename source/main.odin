@@ -8,7 +8,6 @@ WIN_WIDTH :: 1024
 WIN_HEIGHT :: 512
 
 exit := false
-@(private="file")
 pause := true
 @(private="file")
 step := false
@@ -16,6 +15,8 @@ step := false
 window: ^sdl.Window
 @(private="file")
 ttyfile: os.Handle
+@(private="file")
+debug_render: ^sdl.Renderer
 
 main :: proc()
 {
@@ -37,7 +38,7 @@ main :: proc()
 
     render_init(window)
 
-    debug_render := sdl.CreateRenderer(debug_window, -1, sdl.RENDERER_ACCELERATED)
+    debug_render = sdl.CreateRenderer(debug_window, -1, sdl.RENDERER_ACCELERATED)
 
     //Emu stuff
     debug_init(debug_render)
@@ -45,7 +46,7 @@ main :: proc()
     bus_init()
     cpu_init()
 
-    draw_debug_window(debug_render)
+    draw_debug_window()
     render_screen()
 
     when TEST_ENABLE {
@@ -58,7 +59,7 @@ main :: proc()
 
             if step {
                 step = false
-                draw_debug_window(debug_render)
+                draw_debug_window()
                 free_all(context.temp_allocator)
             }
         } else {
@@ -68,7 +69,7 @@ main :: proc()
     render_delete()
 }
 
-draw_debug_window :: proc(debug_render: ^sdl.Renderer)
+draw_debug_window :: proc()
 {
     sdl.RenderClear(debug_render)
     debug_draw()

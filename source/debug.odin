@@ -42,7 +42,7 @@ debug_switch :: proc()
     if debug_type == .last {
         debug_type = .cpu
     }
-    draw_debug_window(renderer)
+    draw_debug_window()
 }
 
 debug_text :: proc(text: cstring, posX: i32, posY: i32)
@@ -61,7 +61,6 @@ debug_text :: proc(text: cstring, posX: i32, posY: i32)
     text_rect.h = texH
 
     sdl.RenderCopy(renderer, texture, nil, &text_rect)
-
     sdl.FreeSurface(surface)
     sdl.DestroyTexture(texture)
 }
