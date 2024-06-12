@@ -2545,8 +2545,10 @@ cpu_dbcc :: proc(opcode: u16) -> bool
     test := cpu_cond_get(cond)
 
     if test == false {
-        D[reg] -= 1
-        if i32(D[reg]) != -1 {
+        data := u16(D[reg]) - 1
+        D[reg] &= 0xFFFF0000
+        D[reg] |= u32(data)
+        if i16(D[reg]) != -1 {
             cpu_pc_add(imm) or_return
             cycles += 6
             cpu_refetch()
