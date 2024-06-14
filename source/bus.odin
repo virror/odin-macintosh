@@ -57,13 +57,30 @@ bus_read :: proc(size: u8, address: u32) -> u32
             }
         } else {
             switch addr {
-                /*case 0x000000..<0x080000:       //RAM
+                case 0x000000..<0x080000:       //RAM
+                    return ram_read(size, addr)
                 case 0x400000..<0x420000:       //ROM
+                    addr -= 0x400000
+                    return bus_read_rom(size, addr)
                 case 0x900000..<0xA00000:       //SCC_R/Phase adjust
+                    if size == 8 {
+                        return scc_read(addr)
+                    } else {
+                        fmt.println(addr)
+                        return 0
+                    }
                 case 0xB00000..<0xC00000:       //SCC_W/Phase adjust
+                    if size == 8 {
+                        return scc_read(addr)
+                    } else {
+                        fmt.println(addr)
+                        return 0
+                    }
                 case 0xD00000..<0xE00000:       //IWM
+                    return iwm_read(size, addr)
                 case 0xE80000..<0xF00000:       //VIA
-                case 0xF00000..<0xF80000:       //Phase read*/
+                    return via_read(size, addr)
+                //case 0xF00000..<0xF80000:       //Phase read
                 case:                           //Rest of memory
                     fmt.println(addr)
                     panic("Unused mem access")
@@ -108,13 +125,27 @@ bus_write :: proc(size: u8, address: u32, value: u32)
             }
         } else {
             switch addr {
-                /*case 0x000000..<0x080000:       //RAM
+                case 0x000000..<0x080000:       //RAM
+                    ram_write(size, addr, value)
                 case 0x400000..<0x420000:       //ROM
+                    fmt.println("Read only memory?")
                 case 0x900000..<0xA00000:       //SCC_R/Phase adjust
+                    if size == 8 {
+                        scc_write(addr, value)
+                    } else {
+                        fmt.println(addr)
+                    }
                 case 0xB00000..<0xC00000:       //SCC_W/Phase adjust
+                    if size == 8 {
+                        scc_write(addr, value)
+                    } else {
+                        fmt.println(addr)
+                    }
                 case 0xD00000..<0xE00000:       //IWM
+                    iwm_write(size, addr, value)
                 case 0xE80000..<0xF00000:       //VIA
-                case 0xF00000..<0xF80000:       //Phase read*/
+                    via_write(size, addr, value)
+                //case 0xF00000..<0xF80000:       //Phase read*/
                 case:                           //Rest of memory
                     fmt.println(addr)
                     panic("Unused mem access")
