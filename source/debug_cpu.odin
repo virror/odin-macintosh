@@ -27,5 +27,5 @@ debug_cpu_draw :: proc()
 
     debug_text(fmt.caprintf("SR %8b", u16(sr)), 10, 260)
 
-    debug_text(fmt.caprintf("> 0x%4x", prefetch[0]), 20, 300)
+    debug_text(fmt.caprintf("> %s", instrTbl[prefetch[0]].debug), 20, 300)
 }

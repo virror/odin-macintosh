@@ -10,7 +10,6 @@ import "base:intrinsics"
 -Check use of SSP
 --Push/pop?
 -Correct prefetch timing
--Dont allow illegal addressing modes
 -Exception timing?
 */
 @(private="file")
@@ -651,359 +650,11 @@ cpu_decode :: proc(opcode: u16) -> u32
 {
     current_op = opcode
     cycles = 0
-    first := (opcode >> 12)
-    switch first {
-        case 0x0:
-            cpu_decode_0(opcode)
-        case 0x1..=0x3:
-            if (opcode >> 6) & 7 == 1 {  //MOVEA
-                cpu_movea(opcode)
-            } else {                    //MOVE
-                cpu_move(opcode)
-            }
-        case 0x4:
-            cpu_decode_4(opcode)
-        case 0x5:
-            cpu_decode_5(opcode)
-        case 0x6:
-            cpu_decode_6(opcode)
-        case 0x7:                       //MOVEQ
-            cpu_moveq(opcode)
-        case 0x8:
-            cpu_decode_8(opcode)
-        case 0x9:
-            cpu_decode_9(opcode)
-        case 0xA:
-            cpu_line1010(opcode)
-        case 0xB:
-            cpu_decode_B(opcode)
-        case 0xC:
-            cpu_decode_C(opcode)
-        case 0xD:
-            cpu_decode_D(opcode)
-        case 0xE:
-            cpu_decode_E(opcode)
-        case 0xF:
-            cpu_line1111(opcode)
-    }
-    if cycles == 0 {
-        cpu_exception(.Illegal)
-    }
+    instrTbl[opcode].function(opcode)
     return cycles
 }
 
-@(private="file")
-cpu_decode_0 :: proc(opcode: u16)
-{
-    if (opcode & 0x100) == 0 {
-        second := (opcode >> 8) & 0xF
-        switch second {
-            case 0x0:
-                sub_code := opcode & 0xFF
-                switch sub_code {
-                    case 0x3C:      //ORI CCR
-                        cpu_ori_ccr(opcode)
-                    case 0x7C:      //ORI SR
-                        cpu_ori_sr(opcode)
-                    case:           //ORI
-                        cpu_alui(opcode, .Or)
-                }
-            case 0x2:
-                sub_code := opcode & 0xFF
-                switch sub_code {
-                    case 0x3C:      //ANDI CCR
-                        cpu_andi_ccr(opcode)
-                    case 0x7C:      //ANDI SR
-                        cpu_andi_sr(opcode)
-                    case:           //ANDI
-                        cpu_alui(opcode, .And)
-                }
-            case 0x4:               //SUBI
-                cpu_alui(opcode, .Sub)
-            case 0x6:               //ADDI
-                cpu_alui(opcode, .Add)
-            case 0x8:
-                sub_code := (opcode >> 6) & 3
-                switch sub_code {
-                    case 0x0:       //BTST
-                        cpu_bit(opcode, true, .Test)
-                    case 0x1:       //BCHG
-                        cpu_bit(opcode, true, .Change)
-                    case 0x2:       //BCLR
-                        cpu_bit(opcode, true, .Clear)
-                    case 0x3:       //BSET
-                        cpu_bit(opcode, true, .Set)
-                }
-            case 0xA:
-                sub_code := opcode & 0xFF
-                switch sub_code {
-                    case 0x3C:      //EORI CCR
-                        cpu_eori_ccr(opcode)
-                    case 0x7C:      //EORI SR
-                        cpu_eori_sr(opcode)
-                    case:           //EORI
-                        cpu_eori(opcode)
-                }
-            case 0xC:               //CMPI
-                cpu_cmpi(opcode)
-        }
-    } else {
-        if ((opcode >> 3) & 7) == 1 {
-            cpu_movep(opcode)
-        } else {
-            sub_code := (opcode >> 6) & 3
-            switch sub_code {
-                case 0x0:       //BTST
-                    cpu_bit(opcode, false, .Test)
-                case 0x1:       //BCHG
-                    cpu_bit(opcode, false, .Change)
-                case 0x2:       //BCLR
-                    cpu_bit(opcode, false, .Clear)
-                case 0x3:       //BSET
-                    cpu_bit(opcode, false, .Set)
-            }
-        }
-    }
-}
-
-@(private="file")
-cpu_decode_4 :: proc(opcode: u16)
-{
-    second := (opcode >> 8) & 0xF
-    switch second {
-        case 0x0:
-            if (opcode >> 6) & 3 == 3 { //MOVE from SR
-                cpu_move_from_sr(opcode)
-            } else {                    //NEGX
-                cpu_negx(opcode)
-            }
-        case 0x2:                       //CLR
-            cpu_clr(opcode)
-        case 0x4:
-            if (opcode >> 6) & 3 == 3 { //MOVE to CCR
-                cpu_move_ccr(opcode)
-            } else {                    //NEG
-                cpu_neg(opcode)
-            }
-        case 0x6:
-            if (opcode >> 6) & 3 == 3 { //MOVE to SR
-                cpu_move_to_sr(opcode)
-            } else {                    //NOT
-                cpu_not(opcode)
-            }
-        case 0x8:
-            if (opcode & 0xFFB8) == 0x4880 {        //EXT
-                cpu_ext(opcode)
-            } else if (opcode >> 3) & 0x3F == 8 {   //SWAP
-                cpu_swap(opcode)
-            } else if (opcode >> 6) & 3 == 1 {      //PEA
-                cpu_pea(opcode)
-            } else if (opcode >> 6) & 3 == 0 {      //NBCD
-                cpu_nbcd(opcode)
-            } else if (opcode >> 7) & 1 == 1 {      //MOVEM
-                cpu_movem(opcode)
-            }
-        case 0xA:
-            if (opcode >> 6) & 3 == 3 {
-                if (opcode & 0x3F) == 0x3C {        //ILLEGAL
-                    cpu_illegal(opcode)
-                } else {                //TAS
-                    cpu_tas(opcode)
-                }
-            } else {                    //TST
-                cpu_tst(opcode)
-            }
-        case 0xC:                       //MOVEM
-            if (opcode >> 7) & 1 == 1 {
-                cpu_movem(opcode)
-            }
-        case 0xE:
-            sub_code := (opcode >> 4) & 0xF
-            switch sub_code {
-                case 0x4:               //TRAP
-                    cpu_trap(opcode)
-                case 0x5:               //Link/UNLK
-                    if (opcode >> 3) & 1 == 0 {
-                        cpu_link(opcode)
-                    } else {
-                        cpu_unlk(opcode)
-                    }
-                case 0x6:               //MOVE USP
-                    cpu_move_usp(opcode)
-                case 0x7:
-                    switch (opcode & 0xF) {
-                        case 0x0:       //RESET
-                            cpu_reset(opcode)
-                        case 0x1:       //NOP
-                            cpu_nop(opcode)
-                        case 0x2:       //STOP
-                            cpu_stop(opcode)
-                        case 0x3:       //RTE
-                            cpu_rte(opcode)
-                        case 0x5:       //RTS
-                            cpu_rts(opcode)
-                        case 0x6:       //TRAPV
-                            cpu_trapv(opcode)
-                        case 0x7:       //RTR
-                            cpu_rtr(opcode)
-                    }
-                case:
-                    switch (opcode >> 6) & 7 {
-                        case 2:         //JSR
-                            cpu_jsr(opcode)
-                        case 3:         //JMP
-                            cpu_jmp(opcode)
-                    }
-            }
-        case:
-            switch (opcode >> 6) & 7 {
-                case 6:         //CHK
-                    cpu_chk(opcode)
-                case 7:         //LEA
-                    cpu_lea(opcode)
-            }
-    }
-}
-
-@(private="file")
-cpu_decode_5 :: proc(opcode: u16)
-{
-    if (opcode >> 6) & 3 == 3 {
-        if (opcode >> 3) & 7 == 1 { //DBcc
-            cpu_dbcc(opcode)
-        } else {                //Scc
-            cpu_scc(opcode)
-        }
-
-    } else {
-        if (opcode >> 8) & 1 == 0 {
-            cpu_addq(opcode)    //ADDQ
-        } else {
-            cpu_subq(opcode)    //SUBQ
-        }
-    }
-}
-
-@(private="file")
-cpu_decode_6 :: proc(opcode: u16)
-{
-    second := (opcode >> 8) & 0xF
-    switch second {
-        case 0x0:
-            cpu_bcc(opcode)
-        case 0x1:
-            cpu_bsr(opcode)
-        case:
-            cpu_bcc(opcode)
-    }
-}
-
-@(private="file")
-cpu_decode_8 :: proc(opcode: u16)
-{
-    sub_code := (opcode >> 6) & 7
-    switch sub_code {
-        case 3:         //DIVU
-            cpu_divu(opcode)
-        case 7:         //DIVS
-            cpu_divs(opcode)
-        case:
-            if (opcode >> 4) & 31 == 16 {//SBCD
-                cpu_sbcd(opcode)
-            } else {    //OR
-                cpu_alu(opcode, .Or)
-            }
-    }
-}
-
-@(private="file")
-cpu_decode_9 :: proc(opcode: u16)
-{
-    if (opcode >> 6) & 3 == 3 { //SUBA
-        cpu_suba(opcode)
-    } else if (opcode & 0xF130) == 0x9100 {//SUBX
-        cpu_alux(opcode, .Sub)
-    } else {                    //SUB
-        cpu_sub(opcode)
-    }
-}
-
-@(private="file")
-cpu_decode_B :: proc(opcode: u16)
-{
-    if (opcode >> 6) & 3 == 3 {         //CMPA
-        cpu_cmpa(opcode)
-    } else if (opcode & 0x100 == 0) {   //CMP
-        cpu_cmp(opcode)
-    } else if (opcode & 0x138) == 0x108 {//CMPM
-        cpu_cmpm(opcode)
-    } else {
-        cpu_eor(opcode)                 //EOR
-    }
-}
-
-@(private="file")
-cpu_decode_C :: proc(opcode: u16)
-{
-    sub_code := (opcode >> 4) & 0x1F
-    switch sub_code {
-        case 0x0C..=0x0F://MULU
-            cpu_mulu(opcode)
-        case 0x1C..=0x1F://MULS
-            cpu_muls(opcode)
-        case 0x10:      //ABCD
-            cpu_abcd(opcode)
-        case 0x14, 0x18://EXG
-            cpu_exg(opcode)
-        case:           //AND
-            cpu_alu(opcode, .And)
-    }
-}
-
-@(private="file")
-cpu_decode_D :: proc(opcode: u16)
-{
-    if (opcode >> 6) & 3 == 3 { //ADDA
-        cpu_adda(opcode)
-    } else if (opcode & 0xF130) == 0xD100 {//ADDX
-        cpu_alux(opcode, .Add)
-    } else {                    //ADD
-        cpu_alu(opcode, .Add)
-    }
-}
-
-@(private="file")
-cpu_decode_E :: proc(opcode: u16)
-{
-    if (opcode >> 6) & 3 == 3 {
-        sub_code := (opcode >> 9) & 7
-        switch sub_code {
-            case 0:
-                cpu_asd_mem(opcode)
-            case 1:
-                cpu_lsd_mem(opcode)
-            case 2:
-                cpu_roxd_mem(opcode)
-            case 3:
-                cpu_rod_mem(opcode)
-        }
-    } else {
-        sub_code := (opcode >> 3) & 3
-        switch sub_code {
-            case 0:
-                cpu_asd_reg(opcode)
-            case 1:
-                cpu_lsd_reg(opcode)
-            case 2:
-                cpu_roxd_reg(opcode)
-            case 3:
-                cpu_rod_reg(opcode)
-        }
-    }
-}
-
-@(private="file")
-cpu_ori_ccr :: proc(opcode: u16)
+cpu_ori_ccr :: proc(opcode: u16) -> bool
 {
     imm := u8(cpu_fetch() & 0xFF)
     tmp_sr := u16(sr)
@@ -1012,10 +663,10 @@ cpu_ori_ccr :: proc(opcode: u16)
     sr = SR(tmp_sr | u16(ccr & 0x1F))
     cycles += 12
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_ori_sr :: proc(opcode: u16)
+cpu_ori_sr :: proc(opcode: u16) -> bool
 {
     if sr.super {
         imm := cpu_fetch()
@@ -1027,12 +678,12 @@ cpu_ori_sr :: proc(opcode: u16)
 
     } else {
         cpu_exception(.Privilege)
-        return
+        return false
     }
+    return true
 }
 
-@(private="file")
-cpu_andi_ccr :: proc(opcode: u16)
+cpu_andi_ccr :: proc(opcode: u16) -> bool
 {
     imm := u8(cpu_fetch() & 0xFF)
     tmp_sr := u16(sr)
@@ -1041,10 +692,10 @@ cpu_andi_ccr :: proc(opcode: u16)
     sr = SR(tmp_sr | u16(ccr & 0x1F))
     cycles += 12
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_andi_sr :: proc(opcode: u16)
+cpu_andi_sr :: proc(opcode: u16) -> bool
 {
     if sr.super {
         imm := cpu_fetch()
@@ -1055,12 +706,12 @@ cpu_andi_sr :: proc(opcode: u16)
         cpu_prefetch()
     } else {
         cpu_exception(.Privilege)
-        return
+        return false
     }
+    return true
 }
 
-@(private="file")
-cpu_eori_ccr :: proc(opcode: u16)
+cpu_eori_ccr :: proc(opcode: u16) -> bool
 {
     imm := u8(cpu_fetch() & 0xFF)
     tmp_sr := u16(sr)
@@ -1069,10 +720,10 @@ cpu_eori_ccr :: proc(opcode: u16)
     sr = SR(tmp_sr | u16(ccr & 0x1F))
     cycles += 12
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_eori_sr :: proc(opcode: u16)
+cpu_eori_sr :: proc(opcode: u16) -> bool
 {
     if sr.super {
         imm := cpu_fetch()
@@ -1083,11 +734,11 @@ cpu_eori_sr :: proc(opcode: u16)
         cpu_prefetch()
     } else {
         cpu_exception(.Privilege)
-        return
+        return false
     }
+    return true
 }
 
-@(private="file")
 cpu_eori :: proc(opcode: u16) -> bool
 {
     size := Size((opcode >> 6) & 3)
@@ -1148,7 +799,6 @@ cpu_eori :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_cmpi :: proc(opcode: u16) -> bool
 {
     size := Size((opcode >> 6) & 3)
@@ -1207,7 +857,6 @@ cpu_cmpi :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_movea :: proc(opcode: u16) -> bool
 {
     size := (opcode >> 12) & 3
@@ -1230,7 +879,6 @@ cpu_movea :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_move :: proc(opcode: u16) -> bool
 {
     size := (opcode >> 12) & 3
@@ -1315,7 +963,26 @@ cpu_move :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
+cpu_addi :: proc(opcode: u16) -> bool
+{
+    return cpu_alui(opcode, .Add)
+}
+
+cpu_subi :: proc(opcode: u16) -> bool
+{
+    return cpu_alui(opcode, .Sub)
+}
+
+cpu_andi :: proc(opcode: u16) -> bool
+{
+    return cpu_alui(opcode, .And)
+}
+
+cpu_ori :: proc(opcode: u16) -> bool
+{
+    return cpu_alui(opcode, .Or)
+}
+
 cpu_alui :: proc(opcode: u16, op: Operation) -> bool
 {
     size := Size((opcode >> 6) & 3)
@@ -1464,7 +1131,46 @@ cpu_alui :: proc(opcode: u16, op: Operation) -> bool
     return true
 }
 
-@(private="file")
+cpu_btst_mem :: proc(opcode: u16) -> bool
+{
+    return cpu_bit(opcode, true, .Test)
+}
+
+cpu_bchg_mem :: proc(opcode: u16) -> bool
+{
+    return cpu_bit(opcode, true, .Change)
+}
+
+cpu_bclr_mem :: proc(opcode: u16) -> bool
+{
+    return cpu_bit(opcode, true, .Clear)
+}
+
+cpu_bset_mem :: proc(opcode: u16) -> bool
+{
+    return cpu_bit(opcode, true, .Set)
+}
+
+cpu_btst_reg :: proc(opcode: u16) -> bool
+{
+    return cpu_bit(opcode, false, .Test)
+}
+
+cpu_bchg_reg :: proc(opcode: u16) -> bool
+{
+    return cpu_bit(opcode, false, .Change)
+}
+
+cpu_bclr_reg :: proc(opcode: u16) -> bool
+{
+    return cpu_bit(opcode, false, .Clear)
+}
+
+cpu_bset_reg :: proc(opcode: u16) -> bool
+{
+    return cpu_bit(opcode, false, .Set)
+}
+
 cpu_bit :: proc(opcode: u16, mem: bool, bitop: BitOp) -> bool
 {
     reg2 := (opcode >> 9) & 7
@@ -1537,7 +1243,6 @@ cpu_bit :: proc(opcode: u16, mem: bool, bitop: BitOp) -> bool
     return true
 }
 
-@(private="file")
 cpu_movep :: proc(opcode: u16) -> bool
 {
     reg2 := (opcode >> 9) & 7
@@ -1576,7 +1281,6 @@ cpu_movep :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_move_from_sr :: proc(opcode: u16) -> bool
 {
     mode := (opcode >> 3) & 7
@@ -1595,7 +1299,6 @@ cpu_move_from_sr :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_negx :: proc(opcode: u16) -> bool
 {
     size := Size((opcode >> 6) & 3)
@@ -1663,7 +1366,6 @@ cpu_negx :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_move_ccr :: proc(opcode: u16) -> bool
 {
     mode := (opcode >> 3) & 7
@@ -1681,7 +1383,6 @@ cpu_move_ccr :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_move_to_sr :: proc(opcode: u16) -> bool
 {
     if sr.super {
@@ -1701,7 +1402,6 @@ cpu_move_to_sr :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_clr :: proc(opcode: u16) -> bool
 {
     size := Size((opcode >> 6) & 3)
@@ -1743,7 +1443,6 @@ cpu_clr :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_neg :: proc(opcode: u16) -> bool
 {
     size := Size((opcode >> 6) & 3)
@@ -1852,8 +1551,7 @@ cpu_not :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
-cpu_ext :: proc(opcode: u16)
+cpu_ext :: proc(opcode: u16) -> bool
 {
     mode := (opcode >> 6) & 7
     reg := opcode & 7
@@ -1870,10 +1568,10 @@ cpu_ext :: proc(opcode: u16)
             flags32_2(data)
     }
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_nbcd :: proc(opcode: u16)
+cpu_nbcd :: proc(opcode: u16) -> bool
 {
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
@@ -1901,10 +1599,10 @@ cpu_nbcd :: proc(opcode: u16)
     sr.n = bool(res >> 7)
     sr.x = sr.c
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_swap :: proc(opcode: u16)
+cpu_swap :: proc(opcode: u16) -> bool
 {
     reg := opcode & 7
 
@@ -1914,10 +1612,10 @@ cpu_swap :: proc(opcode: u16)
     D[reg] = data
     flags32_2(data)
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_pea :: proc(opcode: u16)
+cpu_pea :: proc(opcode: u16) -> bool
 {
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
@@ -1927,16 +1625,16 @@ cpu_pea :: proc(opcode: u16)
     cpu_push32(addr)
     cpu_get_cycles_lea_pea(mode, reg)
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_illegal :: proc(opcode: u16)
+cpu_illegal :: proc(opcode: u16) -> bool
 {
     cpu_exception(.Illegal)
+    return false
 }
 
-@(private="file")
-cpu_tas :: proc(opcode: u16)
+cpu_tas :: proc(opcode: u16) -> bool
 {
     mode := (opcode >> 3) & 7
     reg := (opcode >> 0) & 7
@@ -1953,9 +1651,9 @@ cpu_tas :: proc(opcode: u16)
         cycles += 2
     }
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
 cpu_tst :: proc(opcode: u16) -> bool
 {
     size := Size((opcode >> 6) & 3)
@@ -1978,14 +1676,13 @@ cpu_tst :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
-cpu_trap :: proc(opcode: u16)
+cpu_trap :: proc(opcode: u16) -> bool
 {
     pc += 2 //Point to the next instruction
     cpu_exception(.Trap)
+    return true
 }
 
-@(private="file")
 cpu_link :: proc(opcode: u16) -> bool
 {
     reg := opcode & 7
@@ -1997,7 +1694,6 @@ cpu_link :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_unlk :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 0) & 7
@@ -2011,8 +1707,7 @@ cpu_unlk :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
-cpu_move_usp :: proc(opcode: u16)
+cpu_move_usp :: proc(opcode: u16) -> bool
 {
     if sr.super {
         dir := (opcode >> 3) & 1
@@ -2025,32 +1720,32 @@ cpu_move_usp :: proc(opcode: u16)
         }
     } else {
         cpu_exception(.Privilege)
-        return
+        return false
     }
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_reset :: proc(opcode: u16)
+cpu_reset :: proc(opcode: u16) -> bool
 {
     //TODO: Reset all external devices?
     if sr.super {
         cycles += 128
     } else {
         cpu_exception(.Privilege)
-        return
+        return false
     }
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_nop :: proc(opcode: u16)
+cpu_nop :: proc(opcode: u16) -> bool
 {
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_stop :: proc(opcode: u16)
+cpu_stop :: proc(opcode: u16) -> bool
 {
     if sr.super {
         sr = SR(cpu_fetch())
@@ -2058,12 +1753,12 @@ cpu_stop :: proc(opcode: u16)
         stop = true
     } else {
         cpu_exception(.Privilege)
-        return
+        return false
     }
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
 cpu_rte :: proc(opcode: u16) -> bool
 {
     if sr.super {
@@ -2082,7 +1777,6 @@ cpu_rte :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_rts :: proc(opcode: u16) -> bool
 {
     tmp_pc := bus_read(32, ssp)
@@ -2094,18 +1788,17 @@ cpu_rts :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
-cpu_trapv :: proc(opcode: u16)
+cpu_trapv :: proc(opcode: u16) -> bool
 {
     if sr.v {
         pc += 2 //Point to the next instruction
         cpu_exception(.TrapV)
-        return
+        return false
     }
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
 cpu_rtr :: proc(opcode: u16) -> bool
 {
     sr &= SR(0xFF00)
@@ -2120,7 +1813,6 @@ cpu_rtr :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_jsr :: proc(opcode: u16) -> bool
 {
     mode := (opcode >> 3) & 7
@@ -2139,7 +1831,6 @@ cpu_jsr :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_jmp :: proc(opcode: u16) -> bool
 {
     mode := (opcode >> 3) & 7
@@ -2159,7 +1850,6 @@ cpu_jmp :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_movem :: proc(opcode: u16) -> bool
 {
     dr := (opcode >> 10) & 1
@@ -2326,8 +2016,7 @@ cpu_movem :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
-cpu_lea :: proc(opcode: u16)
+cpu_lea :: proc(opcode: u16) -> bool
 {
     reg2 := (opcode >> 9) & 7
     mode := (opcode >> 3) & 7
@@ -2338,9 +2027,9 @@ cpu_lea :: proc(opcode: u16)
     cycles = 0
     cpu_get_cycles_lea_pea(mode, reg)
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
 cpu_chk :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -2373,7 +2062,6 @@ cpu_chk :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_addq :: proc(opcode: u16) -> bool
 {
     data := (opcode >> 9) & 7
@@ -2455,7 +2143,6 @@ cpu_addq :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_subq :: proc(opcode: u16) -> bool
 {
     data := u8((opcode >> 9) & 7)
@@ -2536,7 +2223,6 @@ cpu_subq :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_dbcc :: proc(opcode: u16) -> bool
 {
     cond := Conditional((opcode >> 8) & 15)
@@ -2558,14 +2244,12 @@ cpu_dbcc :: proc(opcode: u16) -> bool
         }
     } else {
         cycles += 4
-
     }
     cpu_prefetch()
     return true
 }
 
-@(private="file")
-cpu_scc :: proc(opcode: u16)
+cpu_scc :: proc(opcode: u16) -> bool
 {
     cond := Conditional((opcode >> 8) & 15)
     mode := (opcode >> 3) & 7
@@ -2585,9 +2269,9 @@ cpu_scc :: proc(opcode: u16)
         cpu_write8(addr, u8(test) * 0xFF)
     }
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
 cpu_bsr :: proc(opcode: u16) -> bool
 {
     imm := i16(i8(opcode))
@@ -2605,7 +2289,6 @@ cpu_bsr :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_bcc :: proc(opcode: u16) -> bool
 {
     cond := Conditional((opcode >> 8) & 15)
@@ -2631,8 +2314,7 @@ cpu_bcc :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
-cpu_moveq :: proc(opcode: u16)
+cpu_moveq :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
     imm := u32(i32(i8(opcode)))
@@ -2643,9 +2325,9 @@ cpu_moveq :: proc(opcode: u16)
     sr.v = false
     sr.c = false
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
 cpu_divu :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -2698,7 +2380,6 @@ cpu_divu :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_divs :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -2751,8 +2432,7 @@ cpu_divs :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
-cpu_sbcd :: proc(opcode: u16)
+cpu_sbcd :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
     rm := (opcode >> 3) & 1
@@ -2790,9 +2470,9 @@ cpu_sbcd :: proc(opcode: u16)
     }
     cycles += 2
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
 cpu_sub :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -2857,7 +2537,21 @@ cpu_sub :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
+cpu_or :: proc(opcode: u16) -> bool
+{
+    return cpu_alu(opcode, .Or)
+}
+
+cpu_and :: proc(opcode: u16) -> bool
+{
+    return cpu_alu(opcode, .And)
+}
+
+cpu_add :: proc(opcode: u16) -> bool
+{
+    return cpu_alu(opcode, .Add)
+}
+
 cpu_alu :: proc(opcode: u16, op: Operation) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -2944,7 +2638,16 @@ cpu_alu :: proc(opcode: u16, op: Operation) -> bool
     return true
 }
 
-@(private="file")
+cpu_addx :: proc(opcode: u16) -> bool
+{
+    return cpu_alux(opcode, .Add)
+}
+
+cpu_subx :: proc(opcode: u16) -> bool
+{
+    return cpu_alux(opcode, .Sub)
+}
+
 cpu_alux :: proc(opcode: u16, op: Operation) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -3066,7 +2769,6 @@ cpu_alux :: proc(opcode: u16, op: Operation) -> bool
     return true
 }
 
-@(private="file")
 cpu_suba :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -3098,7 +2800,6 @@ cpu_suba :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_cmpm :: proc(opcode: u16) -> bool
 {
     regx := (opcode >> 9) & 7
@@ -3135,7 +2836,6 @@ cpu_cmpm :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_cmp :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -3170,7 +2870,6 @@ cpu_cmp :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_cmpa :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -3201,7 +2900,6 @@ cpu_cmpa :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_eor :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -3252,7 +2950,6 @@ cpu_eor :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_mulu :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -3273,7 +2970,6 @@ cpu_mulu :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_muls :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -3302,8 +2998,7 @@ cpu_muls :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
-cpu_abcd :: proc(opcode: u16)
+cpu_abcd :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
     rm := (opcode >> 3) & 1
@@ -3343,10 +3038,10 @@ cpu_abcd :: proc(opcode: u16)
     }
     cycles += 2
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_exg :: proc(opcode: u16)
+cpu_exg :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
     mode := (opcode >> 3) & 0x1F
@@ -3368,9 +3063,9 @@ cpu_exg :: proc(opcode: u16)
     }
     cycles += 2
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
 cpu_adda :: proc(opcode: u16) -> bool
 {
     reg := (opcode >> 9) & 7
@@ -3402,7 +3097,6 @@ cpu_adda :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_asd_mem :: proc(opcode: u16) -> bool
 {
     dir := (opcode >> 8) & 1
@@ -3438,7 +3132,6 @@ cpu_asd_mem :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_lsd_mem :: proc(opcode: u16) -> bool
 {
     dir := (opcode >> 8) & 1
@@ -3468,7 +3161,6 @@ cpu_lsd_mem :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_roxd_mem :: proc(opcode: u16) -> bool
 {
     dir := (opcode >> 8) & 1
@@ -3498,7 +3190,6 @@ cpu_roxd_mem :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
 cpu_rod_mem :: proc(opcode: u16) -> bool
 {
     dir := (opcode >> 8) & 1
@@ -3527,8 +3218,7 @@ cpu_rod_mem :: proc(opcode: u16) -> bool
     return true
 }
 
-@(private="file")
-cpu_asd_reg :: proc(opcode: u16)
+cpu_asd_reg :: proc(opcode: u16) -> bool
 {
     reg_cnt := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
@@ -3673,10 +3363,10 @@ cpu_asd_reg :: proc(opcode: u16)
     }
     cycles += 2 + 2 * u32(cnt)
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_lsd_reg :: proc(opcode: u16)
+cpu_lsd_reg :: proc(opcode: u16) -> bool
 {
     reg_cnt := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
@@ -3752,10 +3442,10 @@ cpu_lsd_reg :: proc(opcode: u16)
     sr.v = false
     cycles += 2 + 2 * u32(cnt)
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_roxd_reg :: proc(opcode: u16)
+cpu_roxd_reg :: proc(opcode: u16) -> bool
 {
     reg_cnt := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
@@ -3858,10 +3548,10 @@ cpu_roxd_reg :: proc(opcode: u16)
     sr.v = false
     cycles += 2 + 2 * u32(cnt)
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_rod_reg :: proc(opcode: u16)
+cpu_rod_reg :: proc(opcode: u16) -> bool
 {
     reg_cnt := (opcode >> 9) & 7
     dir := (opcode >> 8) & 1
@@ -3979,18 +3669,19 @@ cpu_rod_reg :: proc(opcode: u16)
     sr.v = false
     cycles += 2 + 2 * u32(cnt)
     cpu_prefetch()
+    return true
 }
 
-@(private="file")
-cpu_line1010 :: proc(opcode: u16)
+cpu_line1010 :: proc(opcode: u16) -> bool
 {
     cpu_exception(.Line1010)
+    return true
 }
 
-@(private="file")
-cpu_line1111 :: proc(opcode: u16)
+cpu_line1111 :: proc(opcode: u16) -> bool
 {
     cpu_exception(.Line1111)
+    return true
 }
 
 @(private="file")
