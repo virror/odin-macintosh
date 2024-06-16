@@ -25,7 +25,7 @@ iwm_read :: proc(size: u8, address: u32) -> u32
         case 0xDFEFFF:  //LSTRB on
             return 0
         case 0xDFF1FF:  //disk enable off
-            return 0
+            return 31
         case 0xDFF3FF:  //disk enable on
             return 0
         case 0xDFF5FF:  //int drive
@@ -35,9 +35,9 @@ iwm_read :: proc(size: u8, address: u32) -> u32
         case 0xDFF9FF:  //Q6 off
             return 0
         case 0xDFFBFF:  //Q6 on
-            return 0
+            return 31
         case 0xDFFDFF:  //Q7 off
-            return 0
+            return 31
         case 0xDFFFFF:  //Q7 on
             return 0
     }

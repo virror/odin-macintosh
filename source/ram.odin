@@ -38,7 +38,7 @@ ram_write :: proc(size: u8, addr: u32, value: u32) -> u32
 
 ram_get_vram :: proc() -> []u8
 {
-    if via_get_regA().page2 {   // Alt screen buffer
+    if !via_get_regA().page2 {   // Alt screen buffer
         return ram_mem[0x72700:0x77C80]
     } else {                    // Main screen buffer
         return ram_mem[0x7A700:0x7FC80]

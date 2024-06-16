@@ -7,6 +7,7 @@ http://pasti.fxatari.com/68kdocs/68kPrefetch.html				//Prefetch info
 https://gendev.spritesmind.net/forum/viewtopic.php?t=1964			//BCD instructions info
 https://vintageapple.org/inside_o/pdf/Inside_Macintosh_Volume_III_1985.pdf	//Hardware info for 256/512k versions
 https://clarkson.me.uk/academic/Lecture_notes/aldm8.htm				//Interrupt info
+https://discussions.apple.com/thread/1883152?sortBy=best			//Mac error codes
 
 Tests:
 https://github.com/TomHarte/ProcessorTests/tree/main/680x0/68000/v1
