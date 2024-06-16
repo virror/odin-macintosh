@@ -1,6 +1,7 @@
 package main
 
 import "core:os"
+//import "core:fmt"
 import sdl "vendor:sdl2"
 import sdlttf "vendor:sdl2/ttf"
 
@@ -54,17 +55,32 @@ main :: proc()
         test_all()
     }
 
+    redraw: bool
+    step_length := 1.0 / 60.0
+    accumulated_time :f64= 0.0
+    prev_time := sdl.GetTicks()
+
     for !exit {
-        if !pause || step {
-            cpu_step()
+        time := sdl.GetTicks()
+        accumulated_time += f64(time - prev_time) / 1000.0
+        prev_time = time
+
+        for (!pause || step) && !redraw {
+            cycles := cpu_step()
+            redraw = gpu_step(cycles)
 
             if step {
                 step = false
                 draw_debug_window()
                 free_all(context.temp_allocator)
             }
-        } else {
-            handle_events()
+        }
+        handle_events()
+        if (accumulated_time > step_length) && !pause{
+            gpu_draw()
+            update()
+            redraw = false
+            accumulated_time = 0
         }
     }
     render_delete()
@@ -120,9 +136,6 @@ handle_dbg_keys :: proc(event: ^sdl.Event)
                 exit = true
             case sdl.Keycode.TAB:
                 debug_switch()
-            case sdl.Keycode.d:
-                gpu_draw()
-                update()
         }
     }
 }

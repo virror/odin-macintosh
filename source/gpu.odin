@@ -1,6 +1,20 @@
 package main
 
+@(private="file")
 vram: [0x2AC00]u8
+@(private="file")
+timer: u32
+
+gpu_step :: proc(cycles: u32) -> bool
+{
+    timer += cycles
+    if timer >= 277833 {
+        timer = 0
+        return true
+    } else {
+        return false
+    }
+}
 
 gpu_draw :: proc()
 {
