@@ -24,9 +24,8 @@ gpu_step :: proc(cycles: u32) -> bool
         counter -= 352
 
         if line == 342 { //Start vblank
+            via_irq(.vBlank)
             return true
-        } else if line == 0 { //End vblank
-
         } else if line >= 0 && line < 342 { //Draw line
             vid_ram := ram_get_vram()
             for i:u32=0; i<64; i+=1 {

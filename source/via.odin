@@ -2,9 +2,19 @@ package main
 
 import "core:fmt"
 
+Via_irq :: enum {
+    oneSec = 1,
+    vBlank = 2,
+    kbdRdy = 4,
+    kbdBit = 8,
+    kbdClk = 16,
+    tmr2 = 32,
+    tmr1 = 64,
+}
+
 @(private="file")
 RegisterA :: bit_field u8 {
-    sound: bool     | 3,    //Sound volume
+    sound: u8       | 3,    //Sound volume
     sndPg2: bool    | 1,    //Alternate sound buffer
     overlay: bool   | 1,    //ROM low-memory overlay
     headSel: bool   | 1,    //Disk SEL line
@@ -27,29 +37,23 @@ RegisterB :: bit_field u8 {
 @(private="file")
 PCR :: bit_field u8 {
     vBlankIc: bool  | 1,    //Vertical blanking interrupt control
-    oneSecIc: bool  | 3,    //One-second interrupt control
+    oneSecIc: u8    | 3,    //One-second interrupt control
     kbdClkIc: bool  | 1,    //Keyboard clock interrupt control
-    kbdDatIc: bool  | 3,    //Keyboard data interrupt control
+    kbdDatIc: u8    | 3,    //Keyboard data interrupt control
 }
 
 @(private="file")
 ACR :: bit_field u8 {
     tmr1Irq: bool   | 1,    //Timer Tl interrupts
     tmr2Irq: bool   | 1,    //Timer T2 interrupts
-    kbdShift: bool  | 3,    //Keyboard data bit-shift operation
+    kbdShift: u8    | 3,    //Keyboard data bit-shift operation
     latchRegA: bool | 1,    //Enable/disable for input data latch for Data register B signal lines
-    latchRegB: bool | 2,    //Enable/disable for input data latch for Data register A signal lines
+    latchRegB: u8   | 2,    //Enable/disable for input data latch for Data register A signal lines
 }
 
 @(private="file")
 IRQ :: bit_field u8 {
-    oneSec: bool    | 1,    //One-second interrupt
-    vBlank: bool    | 1,    //Vertical blanking interrupt
-    kbdRdy: bool    | 1,    //Keyboard data ready
-    kbdBit: bool    | 1,    //Keyboard data bit
-    kbdClk: bool    | 1,    //Keyboard clock
-    tmr2: bool      | 1,    //Timer 2
-    tmr1: bool      | 1,    //Timer 1
+    bits: u8        | 7,
     irq: bool       | 1,    //IRQ (all enabled VIA interrupts)
 }
 
@@ -122,7 +126,7 @@ via_read :: proc(size: u8, address: u32) -> u32
         case 0xEFFBFE:      //interrupt flag register
             return u32(irqFlag)
         case 0xEFFDFE:      //interrupt enable register
-            return u32(irqEnbl)
+            return u32(irqEnbl) | 0x80
         case 0xEFFFFE:      //register A
             return u32(registerA)
         case:
@@ -162,7 +166,8 @@ via_write :: proc(size: u8, address: u32, value: u32)
         case 0xEFF9FE:  //peripheral control register
             pcr = PCR(value)
         case 0xEFFBFE:  //interrupt flag register
-            irqFlag = IRQ(value)
+            irqFlag = IRQ(u8(irqFlag) & ~u8(value))
+            irqFlag.irq = bool(irqFlag & irqEnbl)
         case 0xEFFDFE:  //interrupt enable register
             irqEnbl = IRQ(value)
         case 0xEFFFFE:  //register A
@@ -180,4 +185,13 @@ via_get_regA :: proc() -> RegisterA
 via_set_h4 :: proc(enable: bool)
 {
     registerB.h4 = enable
+}
+
+via_irq :: proc(irq: Via_irq)
+{
+    irqFlag.bits |= u8(irq)
+    if (u8(irq) & irqEnbl.bits) > 0 {
+        irqFlag.irq = true
+        //cpu_interrupt(1)
+    }
 }

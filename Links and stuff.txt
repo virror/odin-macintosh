@@ -8,6 +8,7 @@ https://gendev.spritesmind.net/forum/viewtopic.php?t=1964			//BCD instructions i
 https://vintageapple.org/inside_o/pdf/Inside_Macintosh_Volume_III_1985.pdf	//Hardware info for 256/512k versions
 https://clarkson.me.uk/academic/Lecture_notes/aldm8.htm				//Interrupt info
 https://discussions.apple.com/thread/1883152?sortBy=best			//Mac error codes
+https://web.archive.org/web/20221112231425if_/http://archive.6502.org/datasheets/synertek_sy6522_via_1978_jan.pdf //sy622 (VIA) datasheet
 
 Tests:
 https://github.com/TomHarte/ProcessorTests/tree/main/680x0/68000/v1
