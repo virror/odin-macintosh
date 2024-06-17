@@ -78,7 +78,6 @@ main :: proc()
         handle_events()
         if (accumulated_time > step_length) && !pause{
             gpu_draw()
-            update()
             redraw = false
             accumulated_time = 0
         }

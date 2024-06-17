@@ -176,3 +176,8 @@ via_get_regA :: proc() -> RegisterA
 {
     return registerA
 }
+
+via_set_h4 :: proc(enable: bool)
+{
+    registerB.h4 = enable
+}
