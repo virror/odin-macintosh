@@ -192,6 +192,6 @@ via_irq :: proc(irq: Via_irq)
     irqFlag.bits |= u8(irq)
     if (u8(irq) & irqEnbl.bits) > 0 {
         irqFlag.irq = true
-        //cpu_interrupt(1)
+        cpu_interrupt(1)
     }
 }

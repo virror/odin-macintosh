@@ -603,7 +603,7 @@ cpu_exception_irq :: proc(irq: u8)
     bus_write(32, ssp, pc)
     ssp -= 2
     bus_write(16, ssp, u32(tmp_sr))
-    exc_vec := 60 + (irq * 4)
+    exc_vec := 96 + (irq * 4)
     cycles += 44
     stop = false
     pc = bus_read(32, u32(exc_vec))
