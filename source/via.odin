@@ -44,11 +44,11 @@ PCR :: bit_field u8 {
 
 @(private="file")
 ACR :: bit_field u8 {
-    tmr1Irq: bool   | 1,    //Timer Tl interrupts
-    tmr2Irq: bool   | 1,    //Timer T2 interrupts
+    latchRegA: bool | 1,    //Enable/disable for input data latch for Data register A signal lines
+    latchRegB: bool | 1,    //Enable/disable for input data latch for Data register B signal lines
     kbdShift: u8    | 3,    //Keyboard data bit-shift operation
-    latchRegA: bool | 1,    //Enable/disable for input data latch for Data register B signal lines
-    latchRegB: u8   | 2,    //Enable/disable for input data latch for Data register A signal lines
+    tmr2Irq: bool   | 1,    //Timer T2 interrupts
+    tmr1Irq: u8     | 2,    //Timer Tl interrupts
 }
 
 @(private="file")
@@ -72,25 +72,28 @@ irqEnbl: IRQ
 @(private="file")
 kbdShift: u8
 @(private="file")
-tmr1Low: u8
+tmr1Enb: bool
 @(private="file")
-tmr1High: u8
+tmr1Cntr: i32
 @(private="file")
-tmr2Low: u8
-@(private="file")
-tmr2High: u8
-@(private="file")
-tmr1LatchLow: u8
-@(private="file")
-tmr1LatchHigh: u8
+tmr1Latch: u16
 @(private="file")
 regADir: u8
 @(private="file")
 regBDir: u8
+@(private="file")
+tmr2Enb: bool
+@(private="file")
+tmr2Cntr: i32
 
 via_init :: proc()
 {
     registerA.overlay = true
+}
+
+via_step :: proc(cycles: u32)
+{
+    via_update_tmr2(cycles)
 }
 
 via_read :: proc(size: u8, address: u32) -> u32
@@ -106,17 +109,17 @@ via_read :: proc(size: u8, address: u32) -> u32
         case 0xEFE7FE:      //register A direction
             return u32(regADir)
         case 0xEFE9FE:      //timer 1 counter (low byte)
-            return u32(tmr1Low)
+            return u32(u8(tmr1Cntr))
         case 0xEFEBFE:      //timer 1 counter (high byte)
-            return u32(tmr1High)
+            return u32(tmr1Cntr >> 8)
         case 0xEFEDFE:      //timer 1 latch (low byte)
-            return u32(tmr1LatchLow)
+            return u32(u8(tmr1Latch))
         case 0xEFEFFE:      //timer 1 latch (high byte)
-            return u32(tmr1LatchHigh)
+            return u32(tmr1Latch >> 8)
         case 0xEFF1FE:      //timer 2 counter (low byte)
-            return u32(tmr2Low)
+            return u32(u8(tmr2Cntr))
         case 0xEFF3FE:      //timer 2 counter (high byte)
-            return u32(tmr2High)
+            return u32(tmr2Cntr >> 8)
         case 0xEFF5FE:      //shift register (keyboard)
             return u32(kbdShift)
         case 0xEFF7FE:      //auxiliary control register
@@ -148,17 +151,25 @@ via_write :: proc(size: u8, address: u32, value: u32)
         case 0xEFE7FE:  //register A direction
             regADir = u8(value)
         case 0xEFE9FE:  //timer 1 counter (low byte)
-            tmr1Low = u8(value)
+            tmr1Cntr &= 0xFF00
+            tmr1Cntr |= i32(value)
         case 0xEFEBFE:  //timer 1 counter (high byte)
-            tmr1High = u8(value)
+            tmr1Cntr &= 0x00FF
+            tmr1Cntr |= (i32(value) << 8)
+            tmr1Enb = true
         case 0xEFEDFE:  //timer 1 latch (low byte)
-            tmr1LatchLow = u8(value)
+            tmr1Latch &= 0xFF00
+            tmr1Latch |= u16(value)
         case 0xEFEFFE:  //timer 1 latch (high byte)
-            tmr1LatchLow = u8(value)
+            tmr1Latch &= 0x00FF
+            tmr1Latch |= (u16(value) << 8)
         case 0xEFF1FE:  //timer 2 counter (low byte)
-            tmr2Low = u8(value)
+            tmr2Cntr &= 0xFF00
+            tmr2Cntr |= i32(value)
         case 0xEFF3FE:  //timer 2 counter (high byte)
-            tmr2High = u8(value)
+            tmr2Cntr &= 0x00FF
+            tmr2Cntr |= (i32(value) << 8)
+            tmr2Enb = true
         case 0xEFF5FE:  //shift register (keyboard)
             kbdShift = u8(value)
         case 0xEFF7FE:  //auxiliary control register
@@ -169,7 +180,11 @@ via_write :: proc(size: u8, address: u32, value: u32)
             irqFlag = IRQ(u8(irqFlag) & ~u8(value))
             irqFlag.irq = bool(irqFlag & irqEnbl)
         case 0xEFFDFE:  //interrupt enable register
-            irqEnbl = IRQ(value)
+            if (value & 0x80) > 0 { //Set
+                irqEnbl.bits |= u8(value)
+            } else {                //Clear
+                irqEnbl.bits &= u8(~value)
+            }
         case 0xEFFFFE:  //register A
             registerA = RegisterA(value)
         case:
@@ -193,5 +208,21 @@ via_irq :: proc(irq: Via_irq)
     if (u8(irq) & irqEnbl.bits) > 0 {
         irqFlag.irq = true
         cpu_interrupt(1)
+    }
+}
+
+@(private="file")
+via_update_tmr2 :: proc(cycles: u32)
+{
+    if tmr2Enb {
+        if acr.tmr2Irq {
+            //?
+        } else {
+            tmr2Cntr -= i32(cycles)
+            if tmr2Cntr <= 0 {
+                tmr2Enb = false
+                via_irq(.tmr2)
+            }
+        }
     }
 }

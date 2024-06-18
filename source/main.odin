@@ -68,6 +68,7 @@ main :: proc()
         for (!pause || step) && !redraw {
             cycles := cpu_step()
             redraw = gpu_step(cycles)
+            via_step(cycles)
 
             if step {
                 step = false
