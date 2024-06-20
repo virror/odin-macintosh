@@ -145,6 +145,7 @@ via_write :: proc(size: u8, address: u32, value: u32)
     }
     switch address {
         case 0xEFE1FE:  //register B
+            rtc_run(u8(value))
             registerB = RegisterB(value)
         case 0xEFE5FE:  //register B direction
             regBDir = u8(value)
@@ -200,6 +201,11 @@ via_get_regA :: proc() -> RegisterA
 via_set_h4 :: proc(enable: bool)
 {
     registerB.h4 = enable
+}
+
+via_set_TCdata :: proc(data: bool)
+{
+    registerB.TCdata = data
 }
 
 via_irq :: proc(irq: Via_irq)
