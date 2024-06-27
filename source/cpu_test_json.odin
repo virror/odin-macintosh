@@ -40,6 +40,7 @@ Json_data :: struct {
     initial: Registers,
     final: Registers,
     length: u32,
+    transactions: [][]union{ string, int },
 }
 
 @(private="file")
@@ -206,6 +207,36 @@ test_run :: proc(json_data: Json_data)
     }
     if cycles != json_data.length {
         error_string = fmt.aprintf("Fail: cycles %d != %d", cycles, json_data.length)
+    }
+    transaction_len := len(json_data.transactions)
+    for i:= 0; i < transaction_len; i += 1 {
+        type := json_data.transactions[i][0]
+
+        if cpu_trans[i][0] != type {
+            fmt.printfln("Fail: transaction %d, 0: %s != %s", i, cpu_trans[i][0], type)
+            error_string = "a"
+        }
+        if cpu_trans[i][1] != json_data.transactions[i][1] {
+            fmt.printfln("Fail: transaction %d, 1: %d != %d", i, cpu_trans[i][1], json_data.transactions[i][1])
+            error_string = "a"
+        }
+        if type != "n" {
+            /*if cpu_trans[i][2] != json_data.transactions[i][2] {
+                fmt.printfln("Fail: transaction %d, 2: %d != %d", i, cpu_trans[i][2], json_data.transactions[i][2])
+            }*/
+            if cpu_trans[i][3] != json_data.transactions[i][3] {
+                fmt.printfln("Fail: transaction %d, 3: %d != %d", i, cpu_trans[i][3], json_data.transactions[i][3])
+                error_string = "a"
+            }
+            if cpu_trans[i][4] != json_data.transactions[i][4] {
+                fmt.printfln("Fail: transaction %d, 4: %s != %s", i, cpu_trans[i][4], json_data.transactions[i][4])
+                error_string = "a"
+            }
+            if cpu_trans[i][5] != json_data.transactions[i][5] {
+                fmt.printfln("Fail: transaction %d, 5: %d != %d", i, cpu_trans[i][5], json_data.transactions[i][5])
+                error_string = "a"//fmt.aprintf("Fail: transaction %d, 5: %d != %d", i, cpu_trans[i][5], json_data.transactions[i][5])
+            }
+        }
     }
     if error_string != "" {
         when TEST_BREAK_ERROR {
