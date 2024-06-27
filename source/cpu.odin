@@ -10,7 +10,6 @@ import "base:intrinsics"
 -Check use of SSP
 --Push/pop?
 -Exception timing?
--Allow multiple irq types (or in instead of assign)
 */
 @(private="file")
 Exception :: enum {
@@ -162,7 +161,7 @@ cpu_step :: proc() -> u32
 cpu_interrupt :: proc(irq: u8)
 {
     if irq == 7 || irq > sr.intr_mask {
-        irq_req = irq
+        irq_req |= irq
     }
 }
 
