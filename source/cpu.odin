@@ -666,7 +666,6 @@ cpu_exception :: proc(exc: Exception, idles: u32 = 4)
     #partial switch exc {
         case .Illegal:
             exc_vec = 16
-            cycles += 34
         case .Zero:
             exc_vec = 20
         case .CHK:
@@ -675,23 +674,19 @@ cpu_exception :: proc(exc: Exception, idles: u32 = 4)
             exc_vec = 28
         case .Privilege:
             exc_vec = 32
-            cycles += 34
         case .Trace:
             exc_vec = 36
-            cycles += 34
             stop = false
         case .Line1010:
             exc_vec = 40
-            cycles += 34 //?
         case .Line1111:
             exc_vec = 44
-            cycles += 34 //?
         case .Uninitialized:
             exc_vec = 60
-            cycles += 44 //?
+            cycles += 10
         case .Spurious:
             exc_vec = 96
-            cycles += 44 //?
+            cycles += 10
         case .Trap:
             exc_vec = 128 + (u32(current_op & 0xF) << 2)
     }
@@ -1015,12 +1010,11 @@ cpu_move :: proc(opcode: u16) -> bool
             addr2 := cpu_get_address(mode2, reg2, .Byte)
             ea_data := cpu_get_ea_data8(mode2, reg2, addr2)
             addr := cpu_get_address(mode, reg, .Byte)
-            cpu_get_ea_data8(mode, reg, addr)
             if mode == 0 {
                 D[reg] &= 0xFFFFFF00
                 D[reg] |= u32(ea_data)
             } else {
-                bus_write(8, addr, u32(ea_data))
+                cpu_write8(addr, ea_data)
             }
             sr.v = false
             sr.c = false
@@ -1037,7 +1031,7 @@ cpu_move :: proc(opcode: u16) -> bool
 
             if (addr & 1) == 1 {
                 if mode == 3 {
-                    A[reg] -= 2 //TODO: Use a reg function
+                    cpu_Areg_set(reg, A[reg] - 2)
                 }
                 if mode == 4 {
                     cycles += 2
@@ -1050,8 +1044,7 @@ cpu_move :: proc(opcode: u16) -> bool
                 D[reg] &= 0xFFFF0000
                 D[reg] |= u32(ea_data)
             } else {
-                cycles += 4
-                bus_write(16, addr, u32(ea_data))
+                cpu_write16(addr, ea_data)
             }
         case 2:
             addr2 := cpu_get_address(mode2, reg2, .Long)
@@ -1064,7 +1057,7 @@ cpu_move :: proc(opcode: u16) -> bool
 
             if (addr & 1) == 1 {
                 if mode == 3 {
-                    A[reg] -= 4 //TODO: Use a reg function
+                    cpu_Areg_set(reg, A[reg] - 4)
                 }
                 if mode == 4 {
                     cycles += 2
@@ -1360,7 +1353,7 @@ cpu_bit :: proc(opcode: u16, mem: bool, bitop: BitOp) -> bool
             case .Test:
                 //Do nothing
         }
-        if mode == 7 && reg == 4 && mem == false { //TODO: Correct?
+        if mode == 7 && reg == 4 && mem == false {
             cpu_idle(2)
         }
     }
@@ -2030,7 +2023,7 @@ cpu_movem :: proc(opcode: u16) -> bool
                 }
                 if (addr & 1) == 1 {
                     if mode == 4 {
-                        A[reg] += 2 //TODO: Use a reg function
+                        cpu_Areg_set(reg, A[reg] + 2)
                     }
                     cpu_exception_addr(.Address, addr, false)
                     return false
@@ -2104,7 +2097,7 @@ cpu_movem :: proc(opcode: u16) -> bool
             } else {
                 if (addr & 1) == 1 {
                     if mode == 4 {
-                        A[reg] += 2
+                        cpu_Areg_set(reg, A[reg] + 2)
                         cycles -= 2
                     }
                     cpu_exception_addr(.Address, addr, false)
