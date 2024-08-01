@@ -95,6 +95,7 @@ via_init :: proc()
 via_step :: proc(cycles: u32)
 {
     via_update_tmr2(cycles)
+    rtc_update_1sec(cycles)
 }
 
 via_read :: proc(size: u8, address: u32) -> u32

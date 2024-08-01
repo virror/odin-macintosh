@@ -17,6 +17,8 @@ rtc_ram: [20]u8
 rtc_protect: bool
 @(private="file")
 rtc_seconds: u32
+@(private="file")
+sec1_tmr: u32
 
 rtc_init :: proc()
 {
@@ -138,4 +140,14 @@ rtc_load :: proc()
     _, err2 := os.read(file, rtc_ram[0:20])
     assert(err2 == 0, "Failed to read rtc data")
     os.close(file)
+}
+
+rtc_update_1sec :: proc(cycles: u32)
+{
+    sec1_tmr += cycles
+    if sec1_tmr > 783360 {
+        sec1_tmr -= 783360
+        via_irq(.oneSec)
+        rtc_seconds += 1
+    }
 }
