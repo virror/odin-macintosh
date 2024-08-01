@@ -10,7 +10,12 @@ https://clarkson.me.uk/academic/Lecture_notes/aldm8.htm				//Interrupt info
 https://discussions.apple.com/thread/1883152?sortBy=best			//Mac error codes
 https://web.archive.org/web/20221112231425if_/http://archive.6502.org/datasheets/synertek_sy6522_via_1978_jan.pdf //sy622 (VIA) datasheet
 http://www.mac.linux-m68k.org/devel/iwm.php					//Good IWM info
+https://vintageapple.org/macprogramming/pdf/Mac_Programming_FAQs_1996.pdf	//Misc info
 
 Tests:
 https://github.com/TomHarte/ProcessorTests/tree/main/680x0/68000/v1
 https://github.com/MicroCoreLabs/Projects/tree/master/MCL68/MC68000_Test_Code
+https://github.com/SingleStepTests/m68000
+
+Repos:
+https://github.com/twvd/snow
