@@ -6,6 +6,13 @@ vram: [0x2AC00]u8
 counter: u32
 @(private="file")
 line: u32
+@(private="file")
+texture: u32
+
+gpu_init :: proc()
+{
+    texture = texture_create(WIN_WIDTH, WIN_HEIGHT, &vram[0])
+}
 
 //0.0638µs per pixel
 //32.67µs per scanline
@@ -43,6 +50,6 @@ gpu_step :: proc(cycles: u32) -> bool
 
 gpu_draw :: proc()
 {
-    texture_create(WIN_WIDTH, WIN_HEIGHT, &vram[0])
+    texture_update(texture, WIN_WIDTH, WIN_HEIGHT, &vram[0])
     update()
 }

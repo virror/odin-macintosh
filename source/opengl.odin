@@ -146,6 +146,12 @@ texture_create :: proc(w: i32, h: i32, vram: ^u8) -> u32
     return texture
 }
 
+texture_update :: proc(texture: u32, w: i32, h: i32, vram: ^u8)
+{
+    gl.BindTexture(gl.TEXTURE_2D, texture)
+    gl.TexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, w, h, gl.RGB, gl.UNSIGNED_BYTE_2_3_3_REV, vram)
+}
+
 texture_destroy :: proc(texture: u32)
 {
     texture2 := texture // Copy needed to take address of

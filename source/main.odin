@@ -48,6 +48,7 @@ main :: proc()
     rtc_init()
     bus_init()
     cpu_init()
+    gpu_init()
 
     draw_debug_window()
     render_screen()
