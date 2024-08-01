@@ -127,7 +127,7 @@ handle_events :: proc()
                     exit = true
                 }
             case sdl.EventType.MOUSEMOTION:
-                input_mouse_update(event.motion.xrel, event.motion.yrel)
+                input_mouse_update(event.motion.x, event.motion.y)
             case sdl.EventType.MOUSEBUTTONDOWN:
                 if event.button.button == 1 {
                     input_mouse_button()

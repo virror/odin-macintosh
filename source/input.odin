@@ -11,18 +11,15 @@ RawMouseX :: 0x082E
 @(private="file")
 CrsrNew :: 0x08CE
 
-input_mouse_update :: proc(xrel: i32, yrel: i32)
+input_mouse_update :: proc(xpos: i32, ypos: i32)
 {
-    mouse_x := i32(ram_read(16, RawMouseX))
-    mouse_y := i32(ram_read(16, RawMouseY))
-
-    mouse_x += xrel
-    mouse_y += yrel
-
-    ram_write(16, MTempX, u32(mouse_x))
-    ram_write(16, RawMouseX, u32(mouse_x))
-    ram_write(16, MTempY, u32(mouse_y))
-    ram_write(16, RawMouseY, u32(mouse_y))
+    if via_get_regA().overlay {
+        return
+    }
+    ram_write(16, MTempX, u32(xpos))
+    ram_write(16, RawMouseX, u32(xpos))
+    ram_write(16, MTempY, u32(ypos))
+    ram_write(16, RawMouseY, u32(ypos))
     ram_write(8, CrsrNew, 1)
 }
 
