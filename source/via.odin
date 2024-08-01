@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import "base:intrinsics"
 
 Via_irq :: enum {
     oneSec = 1,
@@ -74,9 +75,11 @@ kbdShift: u8
 @(private="file")
 tmr1Enb: bool
 @(private="file")
-tmr1Cntr: i32
+tmr1Cntr: u16
 @(private="file")
-tmr1Latch: u16
+tmr1LatchL: u8
+@(private="file")
+tmr1LatchH: u8
 @(private="file")
 regADir: u8
 @(private="file")
@@ -84,7 +87,9 @@ regBDir: u8
 @(private="file")
 tmr2Enb: bool
 @(private="file")
-tmr2Cntr: i32
+tmr2Cntr: u16
+@(private="file")
+tmr2Latch: u8
 
 via_init :: proc()
 {
@@ -94,6 +99,7 @@ via_init :: proc()
 
 via_step :: proc(cycles: u32)
 {
+    via_update_tmr1(cycles)
     via_update_tmr2(cycles)
     rtc_update_1sec(cycles)
 }
@@ -105,24 +111,29 @@ via_read :: proc(size: u8, address: u32) -> u32
     }
     switch address {
         case 0xEFE1FE:      //register B
+            via_clear_irq(.kbdClk)
+            via_clear_irq(.kbdBit)
             return u32(registerB)
         case 0xEFE5FE:      //register B direction
             return u32(regBDir)
         case 0xEFE7FE:      //register A direction
             return u32(regADir)
         case 0xEFE9FE:      //timer 1 counter (low byte)
+            via_clear_irq(.tmr1)
             return u32(u8(tmr1Cntr))
         case 0xEFEBFE:      //timer 1 counter (high byte)
             return u32(tmr1Cntr >> 8)
         case 0xEFEDFE:      //timer 1 latch (low byte)
-            return u32(u8(tmr1Latch))
+            return u32(tmr1LatchL)
         case 0xEFEFFE:      //timer 1 latch (high byte)
-            return u32(tmr1Latch >> 8)
+            return u32(tmr1LatchH)
         case 0xEFF1FE:      //timer 2 counter (low byte)
+            via_clear_irq(.tmr2)
             return u32(u8(tmr2Cntr))
         case 0xEFF3FE:      //timer 2 counter (high byte)
             return u32(tmr2Cntr >> 8)
         case 0xEFF5FE:      //shift register (keyboard)
+            via_clear_irq(.kbdRdy)
             return u32(kbdShift)
         case 0xEFF7FE:      //auxiliary control register
             return u32(acr)
@@ -133,6 +144,9 @@ via_read :: proc(size: u8, address: u32) -> u32
         case 0xEFFDFE:      //interrupt enable register
             return u32(irqEnbl) | 0x80
         case 0xEFFFFE:      //register A
+            via_clear_irq(.oneSec)
+            via_clear_irq(.vBlank)
+            //fmt.printf("sel %d\n", int(registerA.headSel))
             return u32(registerA)
         case:
             fmt.println("Invalid VIA register read")
@@ -148,32 +162,34 @@ via_write :: proc(size: u8, address: u32, value: u32)
     switch address {
         case 0xEFE1FE:  //register B
             rtc_run(u8(value))
+            via_clear_irq(.kbdClk)
+            via_clear_irq(.kbdBit)
             registerB = RegisterB(value)
         case 0xEFE5FE:  //register B direction
             regBDir = u8(value)
         case 0xEFE7FE:  //register A direction
             regADir = u8(value)
         case 0xEFE9FE:  //timer 1 counter (low byte)
-            tmr1Cntr &= 0xFF00
-            tmr1Cntr |= i32(value)
+            tmr1LatchL = u8(value)
         case 0xEFEBFE:  //timer 1 counter (high byte)
-            tmr1Cntr &= 0x00FF
-            tmr1Cntr |= (i32(value) << 8)
+            tmr1Cntr = (u16(value) << 8)
+            tmr1Cntr |= u16(tmr1LatchL)
+            via_clear_irq(.tmr1)
             tmr1Enb = true
         case 0xEFEDFE:  //timer 1 latch (low byte)
-            tmr1Latch &= 0xFF00
-            tmr1Latch |= u16(value)
+            tmr1LatchL = u8(value)
         case 0xEFEFFE:  //timer 1 latch (high byte)
-            tmr1Latch &= 0x00FF
-            tmr1Latch |= (u16(value) << 8)
+            tmr1LatchH = u8(value)
+            via_clear_irq(.tmr1)
         case 0xEFF1FE:  //timer 2 counter (low byte)
-            tmr2Cntr &= 0xFF00
-            tmr2Cntr |= i32(value)
+            tmr2Latch = u8(value)
         case 0xEFF3FE:  //timer 2 counter (high byte)
-            tmr2Cntr &= 0x00FF
-            tmr2Cntr |= (i32(value) << 8)
+            tmr2Cntr = (u16(value) << 8)
+            tmr2Cntr |= u16(tmr2Latch)
+            via_clear_irq(.tmr2)
             tmr2Enb = true
         case 0xEFF5FE:  //shift register (keyboard)
+            via_clear_irq(.kbdRdy)
             kbdShift = u8(value)
         case 0xEFF7FE:  //auxiliary control register
             acr = ACR(value)
@@ -189,10 +205,18 @@ via_write :: proc(size: u8, address: u32, value: u32)
                 irqEnbl.bits &= u8(~value)
             }
         case 0xEFFFFE:  //register A
+            via_clear_irq(.oneSec)
+            via_clear_irq(.vBlank)
             registerA = RegisterA(value)
         case:
             fmt.println("Invalid VIA register write")
     }
+}
+
+via_clear_irq :: proc(bit: Via_irq)
+{
+    irqFlag.bits &= ~u8(bit)
+    irqFlag.irq = (irqEnbl.bits > 0)
 }
 
 via_get_regA :: proc() -> RegisterA
@@ -225,15 +249,42 @@ via_irq :: proc(irq: Via_irq)
 }
 
 @(private="file")
+via_update_tmr1 :: proc(cycles: u32)
+{
+    if tmr2Enb {
+        switch acr.tmr1Irq {
+            case 0:
+                value, ovf := intrinsics.overflow_sub(tmr1Cntr, u16(cycles))
+                tmr1Cntr = value
+                if ovf {
+                    via_irq(.tmr1)
+                }
+            case 1:
+                value, ovf := intrinsics.overflow_sub(tmr1Cntr, u16(cycles))
+                tmr1Cntr = value
+                if ovf {
+                    via_irq(.tmr1)
+                    tmr1Cntr = u16(tmr1LatchH << 8)
+                    tmr1Cntr |= u16(tmr1LatchL)
+                }
+            case 2://?
+            case 3://?
+
+        }
+    }
+}
+
+
+@(private="file")
 via_update_tmr2 :: proc(cycles: u32)
 {
     if tmr2Enb {
         if acr.tmr2Irq {
             //?
         } else {
-            tmr2Cntr -= i32(cycles)
-            if tmr2Cntr <= 0 {
-                tmr2Enb = false
+            value, ovf := intrinsics.overflow_sub(tmr2Cntr, u16(cycles))
+            tmr2Cntr = value
+            if ovf {
                 via_irq(.tmr2)
             }
         }
