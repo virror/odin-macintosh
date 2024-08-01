@@ -89,6 +89,7 @@ tmr2Cntr: i32
 via_init :: proc()
 {
     registerA.overlay = true
+    registerB.sw = true
 }
 
 via_step :: proc(cycles: u32)
@@ -206,6 +207,11 @@ via_set_h4 :: proc(enable: bool)
 via_set_TCdata :: proc(data: bool)
 {
     registerB.TCdata = data
+}
+
+via_mouse_btn :: proc()
+{
+    registerB.sw = false
 }
 
 via_irq :: proc(irq: Via_irq)

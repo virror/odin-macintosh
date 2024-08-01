@@ -19,11 +19,14 @@ window: ^sdl.Window
 ttyfile: os.Handle
 @(private="file")
 debug_render: ^sdl.Renderer
+@(private="file")
+eclock: u32
 
 main :: proc()
 {
     sdl.Init(sdl.INIT_VIDEO)
     defer sdl.Quit()
+    sdl.ShowCursor(sdl.DISABLE)
 
     sdlttf.Init()
     defer sdlttf.Quit()
@@ -70,7 +73,11 @@ main :: proc()
         for (!pause || step) && !redraw {
             cycles := cpu_step()
             redraw = gpu_step(cycles)
-            via_step(cycles)
+            eclock += cycles
+            if eclock >= 10 {
+                eclock -= 10
+                via_step(cycles)
+            }
 
             if step {
                 step = false
@@ -118,6 +125,12 @@ handle_events :: proc()
             case sdl.EventType.WINDOWEVENT:
                 if event.window.event == sdl.WindowEventID.CLOSE {
                     exit = true
+                }
+            case sdl.EventType.MOUSEMOTION:
+                input_mouse_update(event.motion.xrel, event.motion.yrel)
+            case sdl.EventType.MOUSEBUTTONDOWN:
+                if event.button.button == 1 {
+                    input_mouse_button()
                 }
             case:
                 handle_dbg_keys(&event)
