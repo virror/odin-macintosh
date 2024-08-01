@@ -127,10 +127,14 @@ handle_events :: proc()
                     exit = true
                 }
             case sdl.EventType.MOUSEMOTION:
-                input_mouse_update(event.motion.x, event.motion.y)
+                if event.motion.windowID == 1 {
+                    input_mouse_update(event.motion.x, event.motion.y)
+                }
             case sdl.EventType.MOUSEBUTTONDOWN:
-                if event.button.button == 1 {
-                    input_mouse_button()
+                if event.motion.windowID == 1 {
+                    if event.button.button == 1 {
+                        input_mouse_button()
+                    }
                 }
             case:
                 handle_dbg_keys(&event)
