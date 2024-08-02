@@ -38,11 +38,7 @@ Mode :: bit_field u8 {
 
 @(private="file")
 Status :: bit_field u8 {
-    a: bool         | 1,    //
-    b: bool         | 1,    //
-    c: bool         | 1,    //
-    d: bool         | 1,    //
-    e: bool         | 1,    //
+    mode: bool      | 5,    //From mode
     drive: bool     | 1,    //Drive enabled
     reserved: bool  | 1,    //Reserved
     sense: bool     | 1,    //Sense input
@@ -112,9 +108,11 @@ iwm_read :: proc(size: u8, address: u32) -> u32
             return 0
         case 0xDFF1FF:  //disk enable off
             enbl = false
+            status.drive = false
             return 0
         case 0xDFF3FF:  //disk enable on
             enbl = true
+            status.drive = true
             return 0
         case 0xDFF5FF:  //int drive
             select = false
@@ -190,19 +188,30 @@ iwm_handle_regs :: proc() -> u8
             case 2: //Read status bits
                 disk_reg := u8(sel) | (u8(ca0) << 1) | (u8(ca1) << 2) | (u8(ca2) << 3)
                 fmt.println(disk_reg)
-                #partial switch Disk_status(disk_reg) {
+                switch Disk_status(disk_reg) {
+                    case .DIRTN:
+                        status.sense = step_dir
                     case .CSTIN:
                         status.sense = false
+                    case .STEP:
+                        status.sense = true
+                    case .WRTPRT:
+                        status.sense = true
                     case .MOTORON:
                         status.sense = motor_on
-                    case .SIDES:
-                        status.sense = true
                     case .TKO:
                         status.sense = false
                     case .TACH:
                         status.sense = true
-                    case Disk_status(14):
-                        //??
+                    case .RDDATA0:
+                        //Use lower head
+                    case .RDDATA1:
+                        //Use upper head
+                    case .SIDES:
+                        status.sense = true
+                    case Disk_status(14): //??
+                        status.sense = false
+                    case .DRVIN:
                         status.sense = false
                     case:
                         panic("Unimplemented IWM disk_reg read")
