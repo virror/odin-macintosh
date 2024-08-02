@@ -52,6 +52,7 @@ main :: proc()
     bus_init()
     cpu_init()
     gpu_init()
+    iwm_init()
 
     draw_debug_window()
     render_screen()

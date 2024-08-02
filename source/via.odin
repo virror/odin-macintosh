@@ -208,6 +208,7 @@ via_write :: proc(size: u8, address: u32, value: u32)
             via_clear_irq(.oneSec)
             via_clear_irq(.vBlank)
             registerA = RegisterA(value)
+            iwm_set_sel(registerA.headSel)
         case:
             fmt.println("Invalid VIA register write")
     }
