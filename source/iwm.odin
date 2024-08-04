@@ -9,10 +9,12 @@ Disk_status :: enum {
     WRTPRT = 3,
     MOTORON = 4,
     TKO = 5,
+    SWITCHED = 6,
     TACH = 7,
     RDDATA0 = 8,
     RDDATA1 = 9,
     SIDES = 12,
+    READY = 14,
     DRVIN = 15,
 }
 
@@ -38,11 +40,7 @@ Mode :: bit_field u8 {
 
 @(private="file")
 Status :: bit_field u8 {
-    a: bool         | 1,    //
-    b: bool         | 1,    //
-    c: bool         | 1,    //
-    d: bool         | 1,    //
-    e: bool         | 1,    //
+    mode: bool      | 5,    //Lower mode bits
     drive: bool     | 1,    //Drive enabled
     reserved: bool  | 1,    //Reserved
     sense: bool     | 1,    //Sense input
@@ -56,27 +54,47 @@ Handshake :: bit_field u8 {
 }
 
 @(private="file")
+Drive :: struct {
+    motor_off: bool,
+    step_dir: bool,
+    track: u8,
+    switched: bool,
+    enable: bool,
+    disc: bool,
+}
+
+@(private="file")
 mode: Mode
 @(private="file")
 status: Status
 @(private="file")
 handshake: Handshake
+@(private="file")
+drive: [2]Drive
 ca0: bool
 ca1: bool
 ca2: bool
 lstrb: bool
 enbl: bool
-select: bool
+select: u8
 q6: bool
 q7: bool
 sel: bool
-motor_on: bool
-step_dir: bool
 
 iwm_init :: proc()
 {
     mode = Mode(0x1F)
     handshake = Handshake(0xFF)
+
+    drive[0].motor_off = true
+    drive[0].switched = true
+    drive[0].enable = true
+    drive[0].disc = true
+
+    drive[1].motor_off = true
+    drive[1].switched = true
+    drive[1].enable = false
+    drive[1].disc = false
 }
 
 iwm_read :: proc(size: u8, address: u32) -> u32
@@ -87,53 +105,40 @@ iwm_read :: proc(size: u8, address: u32) -> u32
     switch address {
         case 0xDFE1FF:  //CA0 off
             ca0 = false
-            return 0
         case 0xDFE3FF:  //CA0 on
             ca0 = true
-            return 0
         case 0xDFE5FF:  //CA1 off
             ca1 = false
-            return 0
         case 0xDFE7FF:  //CA1 on
             ca1 = true
-            return 0
         case 0xDFE9FF:  //CA2 off
             ca2 = false
-            return 0
         case 0xDFEBFF:  //CA2 on
             ca2 = true
-            return 0
         case 0xDFEDFF:  //LSTRB off
             lstrb = false
-            return 0
         case 0xDFEFFF:  //LSTRB on
             lstrb = true
             iwm_write_drive()
-            return 0
         case 0xDFF1FF:  //disk enable off
             enbl = false
-            return 0
+            status.drive = false    //TODO: Only false if all drives are off
         case 0xDFF3FF:  //disk enable on
             enbl = true
-            return 0
+            status.drive = true
         case 0xDFF5FF:  //int drive
-            select = false
-            return 0
+            select = 0
         case 0xDFF7FF:  //ext drive
-            select = true
-            return 0
+            select = 1
         case 0xDFF9FF:  //Q6 off
             q6 = false
-            return 0
         case 0xDFFBFF:  //Q6 on
             q6 = true
-            return 0
         case 0xDFFDFF:  //Q7 off
             q7 = false
             return u32(iwm_handle_regs())
         case 0xDFFFFF:  //Q7 on
             q7 = true
-            return 0
     }
     return 0
 }
@@ -183,26 +188,36 @@ iwm_write :: proc(size: u8, address: u32, value: u32)
 iwm_handle_regs :: proc() -> u8
 {
     q6q7 := u8(q7) | u8(q6) << 1
-    fmt.println(q6q7)
     if enbl {
         fmt.println("Disc drive read")
         switch q6q7 {
             case 2: //Read status bits
                 disk_reg := u8(sel) | (u8(ca0) << 1) | (u8(ca1) << 2) | (u8(ca2) << 3)
-                fmt.println(disk_reg)
-                #partial switch Disk_status(disk_reg) {
+                fmt.println(Disk_status(disk_reg))
+                switch Disk_status(disk_reg) {
+                    case .DIRTN:
+                        status.sense = drive[select].step_dir
                     case .CSTIN:
                         status.sense = false
-                    case .MOTORON:
-                        status.sense = motor_on
-                    case .SIDES:
+                    case .STEP:
                         status.sense = true
+                    case .WRTPRT:
+                        status.sense = true 
+                    case .MOTORON:
+                        status.sense = drive[select].motor_off
                     case .TKO:
-                        status.sense = false
+                        status.sense = !(drive[select].track == 0)
+                    case .SWITCHED:
+                        status.sense = drive[select].switched
                     case .TACH:
                         status.sense = true
-                    case Disk_status(14):
-                        //??
+                    case .RDDATA0:
+                    case .RDDATA1:
+                    case .SIDES:
+                        status.sense = false
+                    case .DRVIN:
+                        status.sense = false
+                    case .READY:    // Alternative explanation: "Disk ready for reading?" (0 = ready)
                         status.sense = false
                     case:
                         panic("Unimplemented IWM disk_reg read")
@@ -237,22 +252,26 @@ iwm_write_drive :: proc()
 {
     fmt.println("Disc drive write")
     disk_reg := u8(ca2) | (u8(sel) << 1) | (u8(ca0) << 2) | (u8(ca1) << 3)
-    fmt.println(disk_reg)
+    fmt.println(Disk_ctrl(disk_reg))
     switch Disk_ctrl(disk_reg) {
         case .MOTORON:
-            motor_on = true
+            drive[select].motor_off = true
         case .MOTOROFF:
-            motor_on = false
+            drive[select].motor_off = false
         case .EJECT:
             //Eject
         case .STEPIN:
-            step_dir = false
+            drive[select].step_dir = false
         case .STEPOUT:
-            step_dir = true
+            drive[select].step_dir = true
         case .STEP:
-            //Step
+            if drive[select].step_dir && drive[select].track > 0{
+                drive[select].track -= 1
+            } else if drive[select].track < 79{ //TODO: Check this
+                drive[select].track += 1
+            }
         case .RESET:
-            //Reset disk-switched flag?
+            drive[select].switched = false
         case:
             panic("Unimplemented IWM disk_reg write")
     }
