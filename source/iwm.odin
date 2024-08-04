@@ -185,69 +185,71 @@ iwm_write :: proc(size: u8, address: u32, value: u32)
     }
 }
 
+@(private="file")
 iwm_handle_regs :: proc() -> u8
 {
     q6q7 := u8(q7) | u8(q6) << 1
-    if enbl {
-        fmt.println("Disc drive read")
-        switch q6q7 {
-            case 2: //Read status bits
-                disk_reg := u8(sel) | (u8(ca0) << 1) | (u8(ca1) << 2) | (u8(ca2) << 3)
-                fmt.println(Disk_status(disk_reg))
-                switch Disk_status(disk_reg) {
-                    case .DIRTN:
-                        status.sense = drive[select].step_dir
-                    case .CSTIN:
-                        status.sense = false
-                    case .STEP:
-                        status.sense = true
-                    case .WRTPRT:
-                        status.sense = true 
-                    case .MOTORON:
-                        status.sense = drive[select].motor_off
-                    case .TKO:
-                        status.sense = !(drive[select].track == 0)
-                    case .SWITCHED:
-                        status.sense = drive[select].switched
-                    case .TACH:
-                        status.sense = true
-                    case .RDDATA0:
-                    case .RDDATA1:
-                    case .SIDES:
-                        status.sense = false
-                    case .DRVIN:
-                        status.sense = false
-                    case .READY:    // Alternative explanation: "Disk ready for reading?" (0 = ready)
-                        status.sense = false
-                    case:
-                        panic("Unimplemented IWM disk_reg read")
-                }
-                return u8(status)
-        }
-    } else {
-        fmt.println("IWM Regs")
-        switch q6q7 {
-            case 0:
-                if enbl {
-                    // Read data
-                } else {
-                    return 0xFF
-                }
-            case 1:
-                return u8(handshake)
-            case 2:
+    switch q6q7 {
+        case 0:
+            if enbl {
+                fmt.println("IWM read data")
+                // Read data
+            }
+        case 1:
+            fmt.println("IWM handshake")
+            return u8(handshake)
+        case 2:
+            if enbl {
+                fmt.println("IWM read drive")
+                return iwm_read_status()
+            } else {
+                fmt.println("IWM read status")
                 return u8(status) | (u8(mode) & 0x1F)
-            case 3:
-                if enbl {
-                    //Write data
-                } else {
-                    //Write mode
-                }
-        }
+            }
+        case:
+            fmt.println("IWM read unknown")
+            return 0xFF
     }
     return 0
 }
 
+@(private="file")
+iwm_read_status :: proc() -> u8
+{
+    disk_reg := u8(sel) | (u8(ca0) << 1) | (u8(ca1) << 2) | (u8(ca2) << 3)
+    fmt.println(Disk_status(disk_reg))
+    switch Disk_status(disk_reg) {
+        case .DIRTN:
+            status.sense = drive[select].step_dir
+        case .CSTIN:
+            status.sense = false
+        case .STEP:
+            status.sense = true
+        case .WRTPRT:
+            status.sense = true 
+        case .MOTORON:
+            status.sense = drive[select].motor_off
+        case .TKO:
+            status.sense = !(drive[select].track == 0)
+        case .SWITCHED:
+            status.sense = drive[select].switched
+        case .TACH:
+            status.sense = true
+        case .RDDATA0:
+        case .RDDATA1:
+        case .SIDES:
+            status.sense = false
+        case .DRVIN:
+            status.sense = false
+        case .READY:    // Alternative explanation: "Disk ready for reading?" (0 = ready)
+            status.sense = false
+        case:
+            panic("Unimplemented IWM disk_reg read")
+    }
+    return u8(status)
+}
+
+@(private="file")
 iwm_write_drive :: proc()
 {
     fmt.println("Disc drive write")
