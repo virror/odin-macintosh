@@ -90,11 +90,14 @@ tmr2Enb: bool
 tmr2Cntr: u16
 @(private="file")
 tmr2Latch: u8
+@(private="file")
+tmr2irq: bool
 
 via_init :: proc()
 {
     registerA.overlay = true
     registerB.sw = true
+    tmr2irq = false
 }
 
 via_step :: proc(cycles: u32)
@@ -187,6 +190,7 @@ via_write :: proc(size: u8, address: u32, value: u32)
             tmr2Cntr = (u16(value) << 8)
             tmr2Cntr |= u16(tmr2Latch)
             via_clear_irq(.tmr2)
+            tmr2irq = true
             tmr2Enb = true
         case 0xEFF5FE:  //shift register (keyboard)
             via_clear_irq(.kbdRdy)
@@ -285,8 +289,9 @@ via_update_tmr2 :: proc(cycles: u32)
         } else {
             value, ovf := intrinsics.overflow_sub(tmr2Cntr, u16(cycles))
             tmr2Cntr = value
-            if ovf {
+            if ovf && tmr2irq {
                 via_irq(.tmr2)
+                tmr2irq = false
             }
         }
     }
