@@ -4,15 +4,15 @@ import "core:fmt"
 import "core:os"
 
 when MAC_VER == .Mac_128 {
-    ROM_SIZE :: 0x20000
+    ROM_SIZE :: 0x10000
     ROM_PATH :: "Macintosh 128K.ROM"
 }
 when MAC_VER == .Mac_512 {
-    ROM_SIZE :: 0x20000
+    ROM_SIZE :: 0x10000
     ROM_PATH :: "Macintosh 512K.ROM"
 }
 when MAC_VER == .Mac_Plus {
-    ROM_SIZE :: 0x40000
+    ROM_SIZE :: 0x20000
     ROM_PATH :: "MacPlus v3.ROM"
 }
 
