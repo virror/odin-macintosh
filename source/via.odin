@@ -239,9 +239,9 @@ via_set_TCdata :: proc(data: bool)
     registerB.TCdata = data
 }
 
-via_mouse_btn :: proc()
+via_mouse_btn :: proc(state: bool)
 {
-    registerB.sw = false
+    registerB.sw = !state
 }
 
 via_irq :: proc(irq: Via_irq)

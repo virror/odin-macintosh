@@ -23,7 +23,7 @@ input_mouse_update :: proc(xpos: i32, ypos: i32)
     ram_write(8, CrsrNew, 1)
 }
 
-input_mouse_button :: proc()
+input_mouse_button :: proc(state: bool)
 {
-    via_mouse_btn()
+    via_mouse_btn(state)
 }

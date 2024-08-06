@@ -139,10 +139,10 @@ handle_events :: proc()
                 if event.motion.windowID == 1 {
                     input_mouse_update(event.motion.x, event.motion.y)
                 }
-            case sdl.EventType.MOUSEBUTTONDOWN:
+            case sdl.EventType.MOUSEBUTTONDOWN, sdl.EventType.MOUSEBUTTONUP:
                 if event.motion.windowID == 1 {
                     if event.button.button == 1 {
-                        input_mouse_button()
+                        input_mouse_button(bool(event.button.state))
                     }
                 }
             case:
