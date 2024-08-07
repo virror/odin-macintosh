@@ -3,15 +3,30 @@ package main
 import "core:fmt"
 import "core:os"
 
+when MAC_VER == .Mac_128 {
+    ROM_SIZE :: 0x10000
+    ROM_PATH :: "Macintosh 128K.ROM"
+}
+when MAC_VER == .Mac_512 {
+    ROM_SIZE :: 0x10000
+    ROM_PATH :: "Macintosh 512K.ROM"
+}
+when MAC_VER == .Mac_Plus {
+    ROM_SIZE :: 0x20000
+    ROM_PATH :: "MacPlus v3.ROM"
+}
+
+ROM_END  :: 0x400000 + ROM_SIZE
+
 @(private="file")
-rom_mem: [0x20000]u8
+rom_mem: [ROM_SIZE]u8
 
 bus_init :: proc()
 {
     fmt.println("Bus init") //Get rid of unused fmt error
-    file, err := os.open("roms/Macintosh 512K.ROM", os.O_RDONLY)
+    file, err := os.open("roms/" + ROM_PATH, os.O_RDONLY)
     assert(err == 0, "Failed to open bios")
-    _, err2 := os.read(file, rom_mem[0x00000:0x10000])
+    _, err2 := os.read(file, rom_mem[0x00000:ROM_SIZE])
     assert(err2 == 0, "Failed to read bios data")
     os.close(file)
 }
@@ -26,7 +41,7 @@ bus_read :: proc(size: u8, address: u32) -> u32
             switch addr {
                 case 0x000000..<0x080000:       //ROM
                     return bus_read_rom(size, addr)
-                case 0x400000..<0x420000:       //ROM
+                case 0x400000..<ROM_END:       //ROM
                     addr -= 0x400000
                     return bus_read_rom(size, addr)
                 case 0x600000..<0x680000:       //RAM
@@ -60,11 +75,13 @@ bus_read :: proc(size: u8, address: u32) -> u32
             }
         } else {
             switch addr {
-                case 0x000000..<0x080000:       //RAM
+                case 0x000000..<RAM_SIZE:       //RAM
                     return ram_read(size, addr)
-                case 0x400000..<0x420000:       //ROM
+                case 0x400000..<ROM_END:       //ROM
                     addr -= 0x400000
                     return bus_read_rom(size, addr)
+                case 0x580000..<0x600000:       //SCSI
+                    return 0    //Ignore for now
                 case 0x900000..<0xA00000:       //SCC_R/Phase adjust
                     if size == 8 {
                         return scc_read(addr)
@@ -86,7 +103,8 @@ bus_read :: proc(size: u8, address: u32) -> u32
                 //case 0xF00000..<0xF80000:       //Phase read
                 case:                           //Rest of memory
                     fmt.println(addr)
-                    panic("Unused mem access")
+                    return 0
+                    //panic("Unused mem access")
             }
         }
     }
@@ -101,7 +119,7 @@ bus_write :: proc(size: u8, address: u32, value: u32)
         if via_get_regA().overlay {
             switch addr {
                 /*case 0x000000..<0x080000:       //ROM
-                case 0x400000..<0x420000:       //ROM*/
+                case 0x400000..<ROM_END:       //ROM*/
                 case 0x600000..<0x680000:       //RAM
                     addr -= 0x600000
                     ram_write(size, addr, value)
@@ -128,10 +146,12 @@ bus_write :: proc(size: u8, address: u32, value: u32)
             }
         } else {
             switch addr {
-                case 0x000000..<0x080000:       //RAM
+                case 0x000000..<RAM_SIZE:       //RAM
                     ram_write(size, addr, value)
-                case 0x400000..<0x420000:       //ROM
+                case 0x400000..<ROM_END:       //ROM
                     fmt.println("Read only memory?")
+                case 0x580000..<0x600000:       //SCSI
+                    //Ignore for now
                 case 0x900000..<0xA00000:       //SCC_R/Phase adjust
                     if size == 8 {
                         scc_write(addr, value)

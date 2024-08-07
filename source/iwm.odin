@@ -9,7 +9,7 @@ Disk_status :: enum {
     WRTPRT = 3,
     MOTORON = 4,
     TKO = 5,
-    SWITCHED = 6,
+    EJECTED = 6,
     TACH = 7,
     RDDATA0 = 8,
     RDDATA1 = 9,
@@ -58,9 +58,10 @@ Drive :: struct {
     motor_off: bool,
     step_dir: bool,
     track: u8,
-    switched: bool,
+    ejected: bool,
     enable: bool,
     disc: bool,
+    sides: bool,
 }
 
 @(private="file")
@@ -87,12 +88,12 @@ iwm_init :: proc()
     handshake = Handshake(0xFF)
 
     drive[0].motor_off = true
-    drive[0].switched = true
+    drive[0].ejected = true
     drive[0].enable = true
     drive[0].disc = true
 
     drive[1].motor_off = true
-    drive[1].switched = true
+    drive[1].ejected = true
     drive[1].enable = false
     drive[1].disc = false
 }
@@ -223,7 +224,7 @@ iwm_read_status :: proc() -> bool
         case .DIRTN:
             return drive[select].step_dir
         case .CSTIN:
-            return false
+            return !drive[select].disc
         case .STEP:
             return true
         case .WRTPRT:
@@ -232,18 +233,18 @@ iwm_read_status :: proc() -> bool
             return drive[select].motor_off
         case .TKO:
             return !(drive[select].track == 0)
-        case .SWITCHED:
-            return drive[select].switched
+        case .EJECTED:
+            return drive[select].ejected
         case .TACH:
             return true
         case .RDDATA0:
         case .RDDATA1:
         case .SIDES:
-            return false
+            return drive[select].sides
         case .DRVIN:
-            return false
+            return !drive[select].enable
         case .READY:    // Alternative explanation: "Disk ready for reading?" (0 = ready)
-            return false
+            return !drive[select].enable
         case:
             panic("Unimplemented IWM disk_reg read")
     }
@@ -262,7 +263,7 @@ iwm_write_drive :: proc()
         case .STEPOUT:
             drive[select].step_dir = true
         case .RESET:
-            drive[select].switched = false
+            drive[select].ejected = false
         case .STEP:
             if drive[select].step_dir && drive[select].track > 0{
                 drive[select].track -= 1

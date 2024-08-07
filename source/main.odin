@@ -5,6 +5,14 @@ import "core:os"
 import sdl "vendor:sdl2"
 import sdlttf "vendor:sdl2/ttf"
 
+Mac_version :: enum {
+    Mac_128,
+    Mac_512,
+    Mac_Plus,
+}
+
+MAC_VER :Mac_version: .Mac_512
+
 WIN_WIDTH :: 512
 WIN_HEIGHT :: 342
 
