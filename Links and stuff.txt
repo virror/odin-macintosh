@@ -11,6 +11,8 @@ https://discussions.apple.com/thread/1883152?sortBy=best			//Mac error codes
 https://web.archive.org/web/20221112231425if_/http://archive.6502.org/datasheets/synertek_sy6522_via_1978_jan.pdf //sy622 (VIA) datasheet
 http://www.mac.linux-m68k.org/devel/iwm.php					//Good IWM info
 https://vintageapple.org/macprogramming/pdf/Mac_Programming_FAQs_1996.pdf	//Misc info
+https://mirrors.apple2.org.za/Apple%20II%20Documentation%20Project/Peripherals/Disk%20Drives/Apple%203.5%20Drive/Manuals/Apple%20400k%20Floppy%20Disk%20Drive%20-%206990285A.pdf
+https://www.bigmessowires.com/rom-adapter/plus-rom-listing.asm			//Mac Plus rom assembly
 
 Tests:
 https://github.com/TomHarte/ProcessorTests/tree/main/680x0/68000/v1
