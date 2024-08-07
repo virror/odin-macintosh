@@ -59,6 +59,15 @@ IRQ :: bit_field u8 {
 }
 
 @(private="file")
+Timer :: struct {
+    enable: bool,
+    counter: u16,
+    latchL: u8,
+    latchH: u8,
+    doIrq: bool,
+}
+
+@(private="file")
 registerA: RegisterA
 @(private="file")
 registerB: RegisterB
@@ -73,31 +82,20 @@ irqEnbl: IRQ
 @(private="file")
 kbdShift: u8
 @(private="file")
-tmr1Enb: bool
-@(private="file")
-tmr1Cntr: u16
-@(private="file")
-tmr1LatchL: u8
-@(private="file")
-tmr1LatchH: u8
-@(private="file")
 regADir: u8
 @(private="file")
 regBDir: u8
 @(private="file")
-tmr2Enb: bool
+tmr1: Timer
 @(private="file")
-tmr2Cntr: u16
-@(private="file")
-tmr2Latch: u8
-@(private="file")
-tmr2irq: bool
+tmr2: Timer
 
 via_init :: proc()
 {
     registerA.overlay = true
     registerB.sw = true
-    tmr2irq = false
+    tmr1.doIrq = false
+    tmr2.doIrq = false
 }
 
 via_step :: proc(cycles: u32)
@@ -123,18 +121,18 @@ via_read :: proc(size: u8, address: u32) -> u32
             return u32(regADir)
         case 0xEFE9FE:      //timer 1 counter (low byte)
             via_clear_irq(.tmr1)
-            return u32(u8(tmr1Cntr))
+            return u32(u8(tmr1.counter))
         case 0xEFEBFE:      //timer 1 counter (high byte)
-            return u32(tmr1Cntr >> 8)
+            return u32(tmr1.counter >> 8)
         case 0xEFEDFE:      //timer 1 latch (low byte)
-            return u32(tmr1LatchL)
+            return u32(tmr1.latchL)
         case 0xEFEFFE:      //timer 1 latch (high byte)
-            return u32(tmr1LatchH)
+            return u32(tmr1.latchH)
         case 0xEFF1FE:      //timer 2 counter (low byte)
             via_clear_irq(.tmr2)
-            return u32(u8(tmr2Cntr))
+            return u32(u8(tmr2.counter))
         case 0xEFF3FE:      //timer 2 counter (high byte)
-            return u32(tmr2Cntr >> 8)
+            return u32(tmr2.counter >> 8)
         case 0xEFF5FE:      //shift register (keyboard)
             via_clear_irq(.kbdRdy)
             return u32(kbdShift)
@@ -173,25 +171,26 @@ via_write :: proc(size: u8, address: u32, value: u32)
         case 0xEFE7FE:  //register A direction
             regADir = u8(value)
         case 0xEFE9FE:  //timer 1 counter (low byte)
-            tmr1LatchL = u8(value)
+            tmr1.latchL = u8(value)
         case 0xEFEBFE:  //timer 1 counter (high byte)
-            tmr1Cntr = (u16(value) << 8)
-            tmr1Cntr |= u16(tmr1LatchL)
+            tmr1.counter = (u16(value) << 8)
+            tmr1.counter |= u16(tmr1.latchL)
             via_clear_irq(.tmr1)
-            tmr1Enb = true
+            tmr1.doIrq = true
+            tmr1.enable = true
         case 0xEFEDFE:  //timer 1 latch (low byte)
-            tmr1LatchL = u8(value)
+            tmr1.latchL = u8(value)
         case 0xEFEFFE:  //timer 1 latch (high byte)
-            tmr1LatchH = u8(value)
+            tmr1.latchH = u8(value)
             via_clear_irq(.tmr1)
         case 0xEFF1FE:  //timer 2 counter (low byte)
-            tmr2Latch = u8(value)
+            tmr2.latchL = u8(value)
         case 0xEFF3FE:  //timer 2 counter (high byte)
-            tmr2Cntr = (u16(value) << 8)
-            tmr2Cntr |= u16(tmr2Latch)
+            tmr2.counter = (u16(value) << 8)
+            tmr2.counter |= u16(tmr2.latchL)
             via_clear_irq(.tmr2)
-            tmr2irq = true
-            tmr2Enb = true
+            tmr2.doIrq = true
+            tmr2.enable = true
         case 0xEFF5FE:  //shift register (keyboard)
             via_clear_irq(.kbdRdy)
             kbdShift = u8(value)
@@ -256,42 +255,41 @@ via_irq :: proc(irq: Via_irq)
 @(private="file")
 via_update_tmr1 :: proc(cycles: u32)
 {
-    if tmr2Enb {
+    if tmr1.enable {
         switch acr.tmr1Irq {
             case 0:
-                value, ovf := intrinsics.overflow_sub(tmr1Cntr, u16(cycles))
-                tmr1Cntr = value
-                if ovf {
+                value, ovf := intrinsics.overflow_sub(tmr1.counter, u16(cycles))
+                tmr1.counter = value
+                if ovf && tmr1.doIrq {
                     via_irq(.tmr1)
+                    tmr1.doIrq = false
                 }
             case 1:
-                value, ovf := intrinsics.overflow_sub(tmr1Cntr, u16(cycles))
-                tmr1Cntr = value
+                value, ovf := intrinsics.overflow_sub(tmr1.counter, u16(cycles))
+                tmr1.counter = value
                 if ovf {
                     via_irq(.tmr1)
-                    tmr1Cntr = u16(tmr1LatchH << 8)
-                    tmr1Cntr |= u16(tmr1LatchL)
+                    tmr1.counter = u16(tmr1.latchH << 8)
+                    tmr1.counter |= u16(tmr1.latchL)
                 }
             case 2://?
             case 3://?
-
         }
     }
 }
 
-
 @(private="file")
 via_update_tmr2 :: proc(cycles: u32)
 {
-    if tmr2Enb {
+    if tmr2.enable {
         if acr.tmr2Irq {
             //?
         } else {
-            value, ovf := intrinsics.overflow_sub(tmr2Cntr, u16(cycles))
-            tmr2Cntr = value
-            if ovf && tmr2irq {
+            value, ovf := intrinsics.overflow_sub(tmr2.counter, u16(cycles))
+            tmr2.counter = value
+            if ovf && tmr2.doIrq {
                 via_irq(.tmr2)
-                tmr2irq = false
+                tmr2.doIrq = false
             }
         }
     }
