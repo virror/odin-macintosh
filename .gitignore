@@ -2,3 +2,5 @@
 /source.exe
 /tests
 source.obj
+/disks/*.dsk
+/roms/*.ROM
