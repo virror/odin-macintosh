@@ -32,7 +32,7 @@ eclock: u32
 
 main :: proc()
 {
-    sdl.Init(sdl.INIT_VIDEO)
+    sdl.Init(sdl.INIT_VIDEO | sdl.INIT_AUDIO)
     defer sdl.Quit()
     sdl.ShowCursor(sdl.DISABLE)
 
@@ -61,6 +61,8 @@ main :: proc()
     cpu_init()
     gpu_init()
     iwm_init()
+    audio_init()
+    defer audio_close()
 
     draw_debug_window()
     render_screen()
@@ -82,6 +84,7 @@ main :: proc()
         for (!pause || step) && !redraw {
             cycles := cpu_step()
             redraw = gpu_step(cycles)
+            input_step(cycles)
             eclock += cycles
             if eclock >= 10 {
                 eclock -= 10

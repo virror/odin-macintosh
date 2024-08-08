@@ -13,6 +13,13 @@ Via_irq :: enum {
     tmr1 = 64,
 }
 
+Shift_mode :: enum {
+    none = 0,
+    in_ext = 3,
+    out_sys = 6,
+    out_ext = 7,
+}
+
 @(private="file")
 RegisterA :: bit_field u8 {
     sound: u8       | 3,    //Sound volume
@@ -80,7 +87,7 @@ irqFlag: IRQ
 @(private="file")
 irqEnbl: IRQ
 @(private="file")
-kbdShift: u8
+shift_reg: u8
 @(private="file")
 regADir: u8
 @(private="file")
@@ -135,7 +142,7 @@ via_read :: proc(size: u8, address: u32) -> u32
             return u32(tmr2.counter >> 8)
         case 0xEFF5FE:      //shift register (keyboard)
             via_clear_irq(.kbdRdy)
-            return u32(kbdShift)
+            return u32(shift_reg)
         case 0xEFF7FE:      //auxiliary control register
             return u32(acr)
         case 0xEFF9FE:      //peripheral control register
@@ -166,6 +173,7 @@ via_write :: proc(size: u8, address: u32, value: u32)
             via_clear_irq(.kbdClk)
             via_clear_irq(.kbdBit)
             registerB = RegisterB(value)
+            audio_enable(registerB.sndEnb)
         case 0xEFE5FE:  //register B direction
             regBDir = u8(value)
         case 0xEFE7FE:  //register A direction
@@ -193,7 +201,7 @@ via_write :: proc(size: u8, address: u32, value: u32)
             tmr2.enable = true
         case 0xEFF5FE:  //shift register (keyboard)
             via_clear_irq(.kbdRdy)
-            kbdShift = u8(value)
+            shift_reg = u8(value)
         case 0xEFF7FE:  //auxiliary control register
             acr = ACR(value)
         case 0xEFF9FE:  //peripheral control register
@@ -212,6 +220,7 @@ via_write :: proc(size: u8, address: u32, value: u32)
             via_clear_irq(.vBlank)
             registerA = RegisterA(value)
             iwm_set_sel(registerA.headSel)
+            audio_config(registerA.sound, registerA.sndPg2)
         case:
             fmt.println("Invalid VIA register write")
     }
