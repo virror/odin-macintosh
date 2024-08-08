@@ -9,6 +9,7 @@ import "base:intrinsics"
 --MOVE.w, l (23), (26)
 -Check use of SSP
 --Push/pop?
+-Correct bus transaction order
 -Exception timing?
 */
 @(private="file")
@@ -101,9 +102,6 @@ stop: bool
 current_op: u16
 @(private="file")
 irq_req: u8
-cpu_trans: [35][6]union{ string, int }
-@(private="file")
-trans_cnt: int
 
 cpu_init :: proc()
 {
@@ -112,13 +110,10 @@ cpu_init :: proc()
 }
 
 @(private="file")
-cpu_refetch :: proc(idle: bool = false)
+cpu_refetch :: proc()
 {
     prefetch[2] = cpu_read16_2(pc)
     prefetch[1] = prefetch[2]
-    if idle {
-        cpu_idle(2)
-    }
     prefetch[2] = cpu_read16_2(pc + 2)
     prefetch[0] = prefetch[1]
 }
@@ -133,20 +128,20 @@ cpu_prefetch :: proc()
 }
 
 @(private="file")
-cpu_fetch :: proc(apa: bool = false) -> u16
+cpu_fetch :: proc() -> u16
 {
     ret := prefetch[2]
     pc += 2
-    if apa {
-        prefetch[2] = u16(bus_read(16, pc + 2))
-    } else {
-        prefetch[2], _ = cpu_read16(pc + 2)
-    }
+    prefetch[2], _ = cpu_read16(pc + 2)
     return ret
 }
 
 cpu_step :: proc() -> u32
 {
+    if pc == 0x4006F4 {
+        //ram_write(8, 0x0172, 0xFF)
+        //pause()
+    }
     if stop {
         return 0
     }
@@ -384,28 +379,13 @@ cpu_get_ea_data32 :: proc(mode: u16, reg: u16, addr: u32) -> (u32, bool)
 cpu_idle :: proc(idle_cycles: u32)
 {
     cycles += idle_cycles
-    when TEST_ENABLE {
-        cpu_trans[trans_cnt][0] = "n"
-        cpu_trans[trans_cnt][1] = int(idle_cycles)
-        trans_cnt += 1
-    }
 }
 
 @(private="file")
 cpu_read8 :: proc(addr: u32) -> (u8)
 {
     cycles += 4
-    value := u8(bus_read(8, addr))
-    when TEST_ENABLE {
-        cpu_trans[trans_cnt][0] = "r"
-        cpu_trans[trans_cnt][1] = 4
-        cpu_trans[trans_cnt][2] = 5
-        cpu_trans[trans_cnt][3] = int(addr&0xFFFFFF)
-        cpu_trans[trans_cnt][4] = ".b"
-        cpu_trans[trans_cnt][5] = int(value)
-        trans_cnt += 1
-    }
-    return value
+    return u8(bus_read(8, addr))
 }
 
 @(private="file")
@@ -424,15 +404,6 @@ cpu_read16_2 :: proc(addr: u32) -> u16
 {
     cycles += 4
     value := u16(bus_read(16, addr))
-    when TEST_ENABLE {
-        cpu_trans[trans_cnt][0] = "r"
-        cpu_trans[trans_cnt][1] = 4
-        cpu_trans[trans_cnt][2] = 6
-        cpu_trans[trans_cnt][3] = int(addr&0xFFFFFF)
-        cpu_trans[trans_cnt][4] = ".w"
-        cpu_trans[trans_cnt][5] = int(value)
-        trans_cnt += 1
-    }
     return value
 }
 
@@ -444,41 +415,12 @@ cpu_read32 :: proc(addr: u32) -> (u32, bool)
         return 0, false
     }
     cycles += 8
-    value := bus_read(16, addr)
-    when TEST_ENABLE {
-        cpu_trans[trans_cnt][0] = "r"
-        cpu_trans[trans_cnt][1] = 4
-        cpu_trans[trans_cnt][2] = 6
-        cpu_trans[trans_cnt][3] = int(addr&0xFFFFFF)
-        cpu_trans[trans_cnt][4] = ".w"
-        cpu_trans[trans_cnt][5] = int(value)
-        trans_cnt += 1
-    }
-    value2 := bus_read(16, addr+2)
-    when TEST_ENABLE {
-        cpu_trans[trans_cnt][0] = "r"
-        cpu_trans[trans_cnt][1] = 4
-        cpu_trans[trans_cnt][2] = 6
-        cpu_trans[trans_cnt][3] = int((addr+2)&0xFFFFFF)
-        cpu_trans[trans_cnt][4] = ".w"
-        cpu_trans[trans_cnt][5] = int(value2)
-        trans_cnt += 1
-    }
-    return (value2 | (value << 16)), true
+    return bus_read(32, addr), true
 }
 
 @(private="file")
 cpu_write8 :: proc(addr: u32, value: u8)
 {
-    when TEST_ENABLE {
-        cpu_trans[trans_cnt][0] = "w"
-        cpu_trans[trans_cnt][1] = 4
-        cpu_trans[trans_cnt][2] = 5
-        cpu_trans[trans_cnt][3] = int(addr&0xFFFFFF)
-        cpu_trans[trans_cnt][4] = ".b"
-        cpu_trans[trans_cnt][5] = int(value)
-        trans_cnt += 1
-    }
     bus_write(8, addr, u32(value))
     cycles += 4
 }
@@ -489,15 +431,6 @@ cpu_write16 :: proc(addr: u32, value: u16) -> bool
     if (addr & 1) == 1 {
         cpu_exception_addr(.Address, addr, false)
         return false
-    }
-    when TEST_ENABLE {
-        cpu_trans[trans_cnt][0] = "w"
-        cpu_trans[trans_cnt][1] = 4
-        cpu_trans[trans_cnt][2] = 5
-        cpu_trans[trans_cnt][3] = int(addr&0xFFFFFF)
-        cpu_trans[trans_cnt][4] = ".w"
-        cpu_trans[trans_cnt][5] = int(value)
-        trans_cnt += 1
     }
     bus_write(16, addr, u32(value))
     cycles += 4
@@ -510,24 +443,6 @@ cpu_write32 :: proc(addr: u32, value: u32) -> bool
     if (addr & 1) == 1 {
         cpu_exception_addr(.Address, addr, false)
         return false
-    }
-    when TEST_ENABLE {
-        cpu_trans[trans_cnt][0] = "w"
-        cpu_trans[trans_cnt][1] = 4
-        cpu_trans[trans_cnt][2] = 5
-        cpu_trans[trans_cnt][3] = int((addr+2)&0xFFFFFF)
-        cpu_trans[trans_cnt][4] = ".w"
-        cpu_trans[trans_cnt][5] = int(value&0xFFFF)
-        trans_cnt += 1
-    }
-    when TEST_ENABLE {
-        cpu_trans[trans_cnt][0] = "w"
-        cpu_trans[trans_cnt][1] = 4
-        cpu_trans[trans_cnt][2] = 5
-        cpu_trans[trans_cnt][3] = int(addr&0xFFFFFF)
-        cpu_trans[trans_cnt][4] = ".w"
-        cpu_trans[trans_cnt][5] = int(value>>16)
-        trans_cnt += 1
     }
     bus_write(32, addr, value)
     cycles += 8
@@ -647,27 +562,24 @@ cpu_exception_reset :: proc()
 }
 
 @(private="file")
-cpu_exception :: proc(exc: Exception, idles: u32 = 4)
+cpu_exception :: proc(exc: Exception)
 {
     exc_vec: u32
     tmp_sr := u16(sr)
     sr.super = true
     sr.trace = 0
 
-    if idles > 0 {
-        cpu_idle(idles) //Base is 34 cycles with 4 here
-    }
-    ssp -= 2
-    cpu_write16(ssp, u16(pc))
+    cycles += 6
     ssp -= 4
+    cpu_write32(ssp, pc)
+    ssp -= 2
     cpu_write16(ssp, tmp_sr)
-    ssp += 2
-    cpu_write16(ssp, u16(pc >> 16))
     #partial switch exc {
         case .Illegal:
             exc_vec = 16
         case .Zero:
             exc_vec = 20
+            cycles += 4
         case .CHK:
             exc_vec = 24
         case .TrapV:
@@ -690,10 +602,8 @@ cpu_exception :: proc(exc: Exception, idles: u32 = 4)
         case .Trap:
             exc_vec = 128 + (u32(current_op & 0xF) << 2)
     }
-    pc = u32(cpu_read16_2(exc_vec)) << 16
-    pc |= u32(cpu_read16_2(exc_vec + 2))
-    ssp -= 2
-    cpu_refetch(true)
+    pc, _ = cpu_read32(exc_vec)
+    cpu_refetch()
 }
 
 @(private="file")
@@ -703,17 +613,14 @@ cpu_exception_irq :: proc(irq: u8)
     sr.super = true
     sr.trace = 0
 
-    cpu_idle(14)
-    ssp -= 2
-    cpu_write16(ssp, u16(pc))
+    cycles += 14
     ssp -= 4
+    cpu_write32(ssp, pc)
+    ssp -= 2
     cpu_write16(ssp, tmp_sr)
-    ssp += 2
-    cpu_write16(ssp, u16(pc >> 16))
     exc_vec :u32= 96 + u32(irq * 4)
     stop = false
-    pc = u32(cpu_read16_2(exc_vec)) << 16
-    pc |= u32(cpu_read16_2(exc_vec + 2))
+    pc, _ = cpu_read32(exc_vec)
     cpu_refetch()
 }
 
@@ -727,40 +634,33 @@ cpu_exception_addr :: proc(exc: Exception, addr: u32, rw: bool, i_n: bool = fals
     sr.super = true
     sr.trace = 0
 
-    cpu_idle(4)
-    ssp -= 2
-    cpu_write16(ssp, u16(pc))
+    cycles += 6
     ssp -= 4
+    cpu_write32(ssp, pc)
+    ssp -= 2
     cpu_write16(ssp, tmp_sr)
-    ssp += 2
-    cpu_write16(ssp, u16(pc >> 16))
     #partial switch exc {
         case .Bus:
             exc_vec = 8
         case .Address:
             exc_vec = 12
     }
-    ssp -= 4
-    cpu_write16(ssp, current_op)
     ssp -= 2
-    cpu_write16(ssp, u16(addr))
+    cpu_write16(ssp, current_op)
     ssp -= 4
+    cpu_write32(ssp, addr)
+    ssp -= 2
     flags:u16= ((current_op & 0xFFE0))
     flags |= u16(rw) << 4
     flags |= u16(i_n) << 3
     flags |= function_code
     cpu_write16(ssp, flags)
-    ssp += 2
-    cpu_write16(ssp, u16(addr >> 16))
-    pc = u32(cpu_read16_2(exc_vec)) << 16
-    pc |= u32(cpu_read16_2(exc_vec + 2))
-    ssp -= 2
-    cpu_refetch(true)
+    pc, _ = cpu_read32(exc_vec)
+    cpu_refetch()
 }
 
 cpu_decode :: proc(opcode: u16) -> u32
 {
-    trans_cnt = 0
     current_op = opcode
     cycles = 0
     instrTbl[opcode].function(opcode)
@@ -1927,9 +1827,8 @@ cpu_rts :: proc(opcode: u16) -> bool
 cpu_trapv :: proc(opcode: u16) -> bool
 {
     if sr.v {
-        cpu_read16(pc + 4) //Dummy read
         pc += 2 //Point to the next instruction
-        cpu_exception(.TrapV, 0)
+        cpu_exception(.TrapV)
         return false
     }
     cpu_prefetch()
@@ -2190,7 +2089,8 @@ cpu_chk :: proc(opcode: u16) -> bool
         if data > ea_data {
             cpu_exception(.CHK)
         } else {
-            cpu_exception(.CHK, 6)
+            cycles += 2
+            cpu_exception(.CHK)
         }
         return false
     }
@@ -2366,8 +2266,8 @@ cpu_dbcc :: proc(opcode: u16) -> bool
     test := cpu_cond_get(cond)
 
     if test == false {
-        cpu_idle(2)
-        imm := i32(i16(cpu_fetch(true)))
+        cycles -= 2
+        imm := i32(i16(cpu_fetch()))
         data := u16(D[reg]) - 1
         D[reg] &= 0xFFFF0000
         D[reg] |= u32(data)
@@ -2411,8 +2311,8 @@ cpu_scc :: proc(opcode: u16) -> bool
 cpu_bsr :: proc(opcode: u16) -> bool
 {
     imm := i16(i8(opcode))
-    cpu_idle(2)
-    imm16 := i16(cpu_fetch(true))
+    cycles -= 2
+    imm16 := i16(cpu_fetch())
     if imm == 0 {
         imm = imm16
         cpu_push32(pc + 2)
@@ -2434,7 +2334,8 @@ cpu_bcc :: proc(opcode: u16) -> bool
     if test == true {
         cpu_idle(2)
         if imm == 0 {
-            imm = i16(cpu_fetch(true))
+            cycles -= 4
+            imm = i16(cpu_fetch())
         } else {
             pc += 2
         }
@@ -2479,7 +2380,7 @@ cpu_divu :: proc(opcode: u16) -> bool
         sr.v = false
         sr.n = false
         pc -= 2
-        cpu_exception(.Zero, 8)
+        cpu_exception(.Zero)
         return false
     }
 
@@ -3811,7 +3712,7 @@ cpu_rod_reg :: proc(opcode: u16) -> bool
             } else {
                 sr.c = last
             }
-            cpu_idle(4 + 2 * u32(cnt))
+            cycles += 4 + 2 * u32(cnt)
     }
     sr.v = false
     return true

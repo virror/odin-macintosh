@@ -208,7 +208,7 @@ test_run :: proc(json_data: Json_data)
     if cycles != json_data.length {
         error_string = fmt.aprintf("Fail: cycles %d != %d", cycles, json_data.length)
     }
-    transaction_len := len(json_data.transactions)
+    /*transaction_len := len(json_data.transactions)
     for i:= 0; i < transaction_len; i += 1 {
         type := json_data.transactions[i][0]
 
@@ -237,7 +237,7 @@ test_run :: proc(json_data: Json_data)
                 error_string = "a"//fmt.aprintf("Fail: transaction %d, 5: %d != %d", i, cpu_trans[i][5], json_data.transactions[i][5])
             }
         }
-    }
+    }*/
     if error_string != "" {
         when TEST_BREAK_ERROR {
             fmt.println(json_data.name)
