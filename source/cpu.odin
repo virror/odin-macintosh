@@ -138,10 +138,6 @@ cpu_fetch :: proc() -> u16
 
 cpu_step :: proc() -> u32
 {
-    if pc == 0x4006F4 {
-        //ram_write(8, 0x0172, 0xFF)
-        //pause()
-    }
     if stop {
         return 0
     }
