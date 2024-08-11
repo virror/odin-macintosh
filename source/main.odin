@@ -84,7 +84,6 @@ main :: proc()
         for (!pause || step) && !redraw {
             cycles := cpu_step()
             redraw = gpu_step(cycles)
-            input_step(cycles)
             eclock += cycles
             if eclock >= 10 {
                 eclock -= 10
@@ -163,6 +162,8 @@ handle_dbg_keys :: proc(event: ^sdl.Event)
                 pause = !pause
             case sdl.Keycode.s:
                 step = true
+            case sdl.Keycode.d:
+                iwm_insert_disc()
             case sdl.Keycode.ESCAPE:
                 exit = true
             case sdl.Keycode.TAB:
