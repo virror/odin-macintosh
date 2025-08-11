@@ -13,6 +13,7 @@ http://www.mac.linux-m68k.org/devel/iwm.php					//Good IWM info
 https://vintageapple.org/macprogramming/pdf/Mac_Programming_FAQs_1996.pdf	//Misc info
 https://mirrors.apple2.org.za/Apple%20II%20Documentation%20Project/Peripherals/Disk%20Drives/Apple%203.5%20Drive/Manuals/Apple%20400k%20Floppy%20Disk%20Drive%20-%206990285A.pdf
 https://www.bigmessowires.com/rom-adapter/plus-rom-listing.asm			//Mac Plus rom assembly
+https://thomasw.dev/post/mac-floppy-emu/
 
 Tests:
 https://github.com/TomHarte/ProcessorTests/tree/main/680x0/68000/v1
